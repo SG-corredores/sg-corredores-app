@@ -1,76 +1,55 @@
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SG Corredores</title>
-  <style>
-    body {
-      background: #101820;
-      color: white;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 35px 15px;
-    }
-    h1 { color: #63d69c; }
-    button {
-      padding: 15px 25px;
-      border: 0;
-      border-radius: 10px;
-      background: #63d69c;
-      font-size: 17px;
-      cursor: pointer;
-    }
-    #resultado {
-      margin-top: 25px;
-      line-height: 1.6;
-    }
-  </style>
-</head>
-<body>
-  <h1>SG Corredores</h1>
-  <p>Gestión de frutas y verduras</p>
-  <button onclick="probar()">Probar conexión</button>
-  <p id="resultado"></p>
-
-  <script>
-    const URL_BASE =
-      "https://zyzcnosaavvcijsmcowq.supabase.co";
-
-    const API_KEY =
-      "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7";
-
-    async function probar() {
-      const resultado =
-        document.getElementById("resultado");
-
-      resultado.textContent = "Conectando...";
-
-      try {
-        const respuesta = await fetch(
-          URL_BASE +
-          "/rest/v1/sg_clients?select=id&limit=1",
-          {
-            headers: {
-              "apikey": API_KEY
-            }
-          }
-        );
-
-        if (respuesta.ok) {
-          resultado.textContent =
-            "API accesible. Conexión realizada.";
-        } else {
-          resultado.textContent =
-            "Respuesta de Supabase: " +
-            respuesta.status;
-        }
-      } catch (error) {
-        resultado.textContent =
-          "Error de conexión: " + error.message;
-      }
-    }
-  </script>
-</body>
-</html>
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123b27"><title>SG Corredores</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f6f1;color:#24382b;font:16px system-ui,Arial}header{background:#123b27;color:white;padding:17px}header h1{margin:0;font-size:25px}header small{color:#c5e9d1}nav{display:flex;overflow-x:auto;gap:7px;background:#dbeadd;padding:10px}button{border:0;border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer}nav button{white-space:nowrap;background:white}.primary,nav .active{background:#167a43;color:white}.secondary{background:#e4eee6;color:#20583a}.danger{background:#ffe3e3;color:#a22}main{max-width:900px;margin:auto;padding:14px 14px 100px}.card{background:white;border-radius:13px;padding:17px;margin-bottom:13px;box-shadow:0 2px 8px #0001}h2{font-size:21px;color:#155e36;margin:0 0 12px}h3{margin:4px 0 9px}label{display:block;font-size:14px;font-weight:700;margin:10px 0 5px}input,select,textarea{display:block;width:100%;font:16px system-ui;padding:11px;border:1px solid #c9d5cc;border-radius:8px;background:white}textarea{min-height:70px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}@media(max-width:580px){.grid{grid-template-columns:1fr}}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.item{padding:12px 0;border-bottom:1px solid #e6ece7}.item:last-child{border:0}.muted{font-size:13px;color:#66796d}.big{font-size:27px;font-weight:800;color:#167a43}.pill{display:inline-block;background:#e7f2e9;border-radius:15px;padding:4px 8px;font-size:12px}#login{max-width:470px;margin:25px auto;padding:12px}#app{display:none}#toast{position:fixed;bottom:14px;left:12px;right:12px;padding:14px;background:#153c28;color:white;border-radius:11px;display:none;z-index:20}#avo{position:fixed;right:15px;bottom:15px;background:#add46b;border:3px solid #285e34;border-radius:50%;height:72px;width:72px;font-size:38px;z-index:10}#avo.dance{animation:dance .3s alternate 6}@keyframes dance{to{transform:rotate(19deg) translateY(-12px)}from{transform:rotate(-19deg)}}.hidden{display:none}
+</style></head><body>
+<section id="login"><div class="card"><h1>🥑 SG Corredores</h1><p>30 años a su servicio · Máxima frescura y calidad</p><h2>Iniciar sesión</h2><label>Correo</label><input id="email" type="email" autocomplete="username"><label>Contraseña</label><input id="password" type="password" autocomplete="current-password"><div class="actions"><button class="primary" onclick="signIn()">Entrar</button></div><p id="loginError" class="muted"></p><details><summary>Configuración de Supabase</summary><label>URL del proyecto</label><input id="projectUrl" value="https://zyzcnosaavvcijsmcowq.supabase.co"><label>Clave pública Publishable</label><input id="publicKey" placeholder="sb_publishable_..."><div class="actions"><button class="secondary" onclick="saveConfig()">Guardar conexión</button></div><p class="muted">No introduzcas claves secret ni service_role.</p></details></div></section>
+<section id="app"><header><h1>SG Corredores</h1><small>Corredores de frutas y verduras</small><div id="status" class="muted" style="color:#c5e9d1">Conectando...</div></header><nav id="nav"><button onclick="go('inicio')">Inicio</button><button onclick="go('clientes')">Clientes</button><button onclick="go('pedidos')">Pedidos</button><button onclick="go('compras')">Compras</button><button onclick="go('comisiones')">Comisiones</button><button onclick="go('ajustes')">Ajustes</button></nav><main id="content"></main><button id="avo" onclick="aguacatin()">🥑</button></section><div id="toast"></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id), TABLES={clients:'sg_clients',orders:'sg_orders',purchases:'sg_purchases'}, CONFIG='sg_config_v7';
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let config={url:'https://zyzcnosaavvcijsmcowq.supabase.co',key:''};try{config={...config,...JSON.parse(localStorage.getItem(CONFIG)||'{}')}}catch{}
+let api,user,workspace,role,page='inicio',editing=null,syncing=false,lastSync=null,timer=null,records={clients:[],orders:[],purchases:[]};
+const today=()=>{let d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
+function parseNum(v){let s=String(v??'').trim().replace(/\s/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');if(!s)return NaN;let n=Number(s);return Number.isFinite(n)?n:NaN}
+function fmt(n){return Number(n||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'}
+function qty(n){return Number(n||0).toLocaleString('es-ES',{maximumFractionDigits:3})}
+function norm(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+function val(id){return $(id)?.value?.trim()||''}function d(r){return r?.data||{}}function get(t,id){return records[t].find(r=>r.id===id)}
+function name(id){return d(get('clients',id)).name||'Cliente no encontrado'}
+function toast(s){$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').style.display='none',6000)}
+function err(e){return e?.message||String(e)}
+function connect(){if(!window.supabase?.createClient)throw Error('No se pudo cargar Supabase. Comprueba Internet.');if(!config.key)throw Error('Abre Configuración de Supabase e introduce la clave pública.');api=window.supabase.createClient(config.url,config.key,{auth:{persistSession:true,autoRefreshToken:true}})}
+function saveConfig(){let url=val('projectUrl').replace(/\/$/,'');let key=val('publicKey');if(!url.startsWith('https://')||!(key.startsWith('sb_publishable_')||key.startsWith('eyJ'))){toast('Comprueba URL y clave pública.');return}config={url,key};localStorage.setItem(CONFIG,JSON.stringify(config));try{connect();toast('Conexión configurada. Inicia sesión.')}catch(e){toast(err(e))}}
+async function signIn(){try{$('loginError').textContent='';if(!api)connect();let email=val('email'),password=$('password').value;if(!email||!password)throw Error('Introduce correo y contraseña.');let {data,error}=await api.auth.signInWithPassword({email,password});if(error)throw error;user=data.user;await enter()}catch(e){$('loginError').textContent=err(e)}}
+async function enter(){let {data,error}=await api.from('sg_members').select('workspace_id,role').eq('user_id',user.id);if(error)throw error;if(!data?.length)throw Error('Este usuario no está registrado como miembro de SG Corredores.');workspace=data[0].workspace_id;role=data[0].role;await sync();$('login').style.display='none';$('app').style.display='block';go('inicio');clearInterval(timer);timer=setInterval(()=>sync(true),12000);setTimeout(()=>aguacatin(true),600)}
+async function logout(){clearInterval(timer);if(api)await api.auth.signOut();user=null;workspace=null;records={clients:[],orders:[],purchases:[]};$('app').style.display='none';$('login').style.display='block'}
+async function sync(silent=false){if(!api||!workspace||syncing)return;syncing=true;try{const keys=Object.keys(TABLES);const results=await Promise.all(keys.map(k=>api.from(TABLES[k]).select('id,data,updated_at').eq('workspace_id',workspace).order('updated_at',{ascending:false})));for(let i=0;i<results.length;i++)if(results[i].error)throw results[i].error;keys.forEach((k,i)=>records[k]=results[i].data||[]);lastSync=new Date();$('status').textContent='● Sincronizado · '+lastSync.toLocaleTimeString('es-ES');if(!editing)render()}catch(e){$('status').textContent='⚠ Error de sincronización';if(!silent)toast(err(e))}finally{syncing=false}}
+async function save(t,body,id){if(!api||!workspace||!user)throw Error('Sesión no iniciada.');let row={workspace_id:workspace,data:body,updated_by:user.id};let result;if(id){result=await api.from(TABLES[t]).update(row).eq('workspace_id',workspace).eq('id',id).select('id')}else{result=await api.from(TABLES[t]).insert({...row,id:crypto.randomUUID()}).select('id')}if(result.error)throw result.error;if(!result.data?.length)throw Error('No se ha confirmado el guardado. Comprueba permisos RLS.');await sync();return result.data[0].id}
+async function remove(t,id){if(!confirm('¿Eliminar este registro?'))return;try{let {data,error}=await api.from(TABLES[t]).delete().eq('workspace_id',workspace).eq('id',id).select('id');if(error)throw error;if(!data?.length)throw Error('No se ha confirmado la eliminación.');editing=null;await sync();render();toast('Eliminado')}catch(e){toast(err(e))}}
+function go(p){page=p;editing=null;render()}function edit(t,id){editing={t,id};render();scrollTo(0,0)}function cancel(){editing=null;render()}
+function options(selected){return records.clients.map(r=>`<option value="${esc(r.id)}" ${r.id===selected?'selected':''}>${esc(d(r).name)}</option>`).join('')}
+function render(){if($('app').style.display==='none')return;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===page));$('content').innerHTML=({inicio:home,clientes:clients,pedidos:orders,compras:purchases,comisiones:commissions,ajustes:settings}[page]||home)();if(page==='compras')toggleWeight()}
+function rate(client,product){let c=norm(client),p=norm(product);if(c.includes('cotelo')||c.includes('naya'))return .04;if(c.includes('ortega')||c.includes('huerta')){if(p.includes('patata')||p.includes('cebolla'))return .02;if(c.includes('ortega')&&p.includes('ajo'))return .02}return .035}
+function kilos(x){return x.weightMode==='fixed'?Number(x.boxes||0)*Number(x.kgPerBox||0):Number(x.kg||0)}
+function commission(x){return kilos(x)*rate(name(x.clientId),x.product)}
+function price(x){return x.priceCents!=null?Number(x.priceCents)/100:Number(x.price||0)}
+function priceInput(x){return x.priceCents!=null?(x.priceCents/100).toFixed(2):x.price??''}
+function home(){let o=records.orders.filter(r=>d(r).date===today()),p=records.purchases.filter(r=>d(r).date===today()&&d(r).status!=='Anulado');return `<div class="card"><h2>🥑 ¿Quién pide hoy?</h2><p>Pedidos y compras compartidos entre empleados.</p><div class="actions"><button class="primary" onclick="go('pedidos')">Nuevo pedido</button><button class="secondary" onclick="go('compras')">Registrar compra</button><button class="secondary" onclick="sync()">Actualizar</button></div></div><div class="grid"><div class="card"><h3>Clientes</h3><div class="big">${records.clients.length}</div></div><div class="card"><h3>Pedidos hoy</h3><div class="big">${o.length}</div></div><div class="card"><h3>Kilos cargados hoy</h3><div class="big">${qty(p.reduce((a,r)=>a+kilos(d(r)),0))}</div></div><div class="card"><h3>Comisión hoy</h3><div class="big">${fmt(p.reduce((a,r)=>a+commission(d(r)),0))}</div></div></div><div class="card"><h2>Pedidos de hoy</h2>${o.map(r=>`<div class="item"><b>${esc(name(d(r).clientId))}</b><p>${esc(d(r).product)} · ${esc(d(r).variety||'')} · ${qty(d(r).boxes)} cajas</p><span class="pill">${esc(d(r).status||'Pendiente')}</span></div>`).join('')||'<p>No hay pedidos hoy.</p>'}</div>`}
+function clients(){let r=editing?.t==='clients'?get('clients',editing.id):null,x=d(r);return `<div class="card"><h2>${r?'Editar':'Nuevo'} cliente</h2><label>Nombre</label><input id="cName" value="${esc(x.name||'')}"><label>Teléfono</label><input id="cPhone" value="${esc(x.phone||'')}"><label>Observaciones</label><textarea id="cNotes">${esc(x.notes||'')}</textarea><div class="actions"><button class="primary" onclick="saveClient()">Guardar cliente</button>${r?'<button class="secondary" onclick="cancel()">Cancelar</button>':''}</div></div><div class="card"><h2>Clientes (${records.clients.length})</h2>${records.clients.map(r=>`<div class="item"><b>${esc(d(r).name)}</b><p class="muted">${esc(d(r).phone||'')}</p><div class="actions"><button class="secondary" onclick="edit('clients','${r.id}')">Editar</button><button class="danger" onclick="remove('clients','${r.id}')">Eliminar</button></div></div>`).join('')||'<p>Sin clientes.</p>'}</div>`}
+async function saveClient(){let n=val('cName');if(!n)return toast('Introduce un nombre.');let r=editing?.t==='clients'?get('clients',editing.id):null;try{await save('clients',{...d(r),name:n,phone:val('cPhone'),notes:val('cNotes')},r?.id);editing=null;render();toast('Cliente guardado y sincronizado.');dance()}catch(e){toast(err(e))}}
+function orders(){let r=editing?.t==='orders'?get('orders',editing.id):null,x=d(r);return `<div class="card"><h2>${r?'Editar':'Nuevo'} pedido</h2>${records.clients.length?`<div class="grid"><div><label>Fecha</label><input id="oDate" type="date" value="${esc(x.date||today())}"></div><div><label>Cliente</label><select id="oClient">${options(x.clientId)}</select></div><div><label>Producto</label><input id="oProduct" value="${esc(x.product||'')}"></div><div><label>Variedad</label><input id="oVariety" value="${esc(x.variety||'')}"></div><div><label>Cajas solicitadas</label><input id="oBoxes" inputmode="decimal" value="${esc(x.boxes??'')}"></div><div><label>Precio por kg (€)</label><input id="oPrice" inputmode="decimal" value="${esc(priceInput(x))}" placeholder="0,65"></div><div><label>Estado</label><select id="oStatus">${['Pendiente','En compra','Parcial','Completado','Cancelado'].map(s=>`<option ${x.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><label>Observaciones</label><textarea id="oNotes">${esc(x.notes||'')}</textarea><div class="actions"><button class="primary" onclick="saveOrder()">Guardar pedido</button>${r?'<button class="secondary" onclick="cancel()">Cancelar</button>':''}</div>`:'<p>Primero registra un cliente.</p>'}</div><div class="card"><h2>Pedidos compartidos</h2>${records.orders.map(r=>{let x=d(r);return `<div class="item"><b>${esc(name(x.clientId))}</b><p>${esc(x.date||'')} · ${esc(x.product||'')} ${esc(x.variety||'')}</p><p>${qty(x.boxes)} cajas · ${fmt(price(x))}/kg</p><span class="pill">${esc(x.status||'Pendiente')}</span><div class="actions"><button class="secondary" onclick="edit('orders','${r.id}')">Editar</button><button class="danger" onclick="remove('orders','${r.id}')">Eliminar</button></div></div>`}).join('')||'<p>Sin pedidos.</p>'}</div>`}
+async function saveOrder(){let boxes=parseNum(val('oBoxes')),p=parseNum(val('oPrice'));if(!val('oProduct')||!val('oClient')||!Number.isFinite(boxes)||boxes<=0||!Number.isFinite(p)||p<0||Math.round(p*100)!==p*100&&Math.abs(Math.round(p*100)-p*100)>1e-8)return toast('Comprueba cliente, producto, cajas y precio (máximo dos decimales).');let r=editing?.t==='orders'?get('orders',editing.id):null;try{await save('orders',{...d(r),date:val('oDate'),clientId:val('oClient'),product:val('oProduct'),variety:val('oVariety'),boxes,priceCents:Math.round(p*100),status:val('oStatus'),notes:val('oNotes')},r?.id);editing=null;render();toast('Pedido sincronizado.');dance()}catch(e){toast(err(e))}}
+function purchases(){let r=editing?.t==='purchases'?get('purchases',editing.id):null,x=d(r);return `<div class="card"><h2>${r?'Editar':'Registrar'} compra / carga</h2>${records.clients.length?`<div class="grid"><div><label>Fecha</label><input id="pDate" type="date" value="${esc(x.date||today())}"></div><div><label>Cliente</label><select id="pClient">${options(x.clientId)}</select></div><div><label>Producto</label><input id="pProduct" value="${esc(x.product||'')}"></div><div><label>Variedad</label><input id="pVariety" value="${esc(x.variety||'')}"></div><div><label>Puesto / proveedor</label><input id="pSupplier" value="${esc(x.supplier||'')}"></div><div><label>Cajas</label><input id="pBoxes" inputmode="decimal" value="${esc(x.boxes??'')}"></div><div><label>Tipo de peso</label><select id="pMode" onchange="toggleWeight()"><option value="real" ${x.weightMode!=='fixed'?'selected':''}>Kilos reales cargados</option><option value="fixed" ${x.weightMode==='fixed'?'selected':''}>Peso fijo por caja</option></select></div><div id="realWeight"><label>Kilos cargados</label><input id="pKg" inputmode="decimal" value="${esc(x.kg??'')}"></div><div id="fixedWeight"><label>Kg asignados por caja</label><input id="pKgBox" inputmode="decimal" value="${esc(x.kgPerBox??'')}"></div><div><label>Precio por kg (€)</label><input id="pPrice" inputmode="decimal" value="${esc(priceInput(x))}" placeholder="0,65"></div><div><label>Estado</label><select id="pStatus">${['Pendiente','Cargado','Anulado'].map(s=>`<option ${x.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><label>Observaciones</label><textarea id="pNotes">${esc(x.notes||'')}</textarea><div class="actions"><button class="primary" onclick="savePurchase()">Guardar compra</button>${r?'<button class="secondary" onclick="cancel()">Cancelar</button>':''}</div>`:'<p>Primero registra un cliente.</p>'}</div><div class="card"><h2>Compras compartidas</h2>${records.purchases.map(r=>{let x=d(r);return `<div class="item"><b>${esc(name(x.clientId))}</b><p>${esc(x.date||'')} · ${esc(x.product||'')} ${esc(x.variety||'')} · ${esc(x.supplier||'')}</p><p>${qty(kilos(x))} kg · ${fmt(price(x))}/kg · ${esc(x.status||'Pendiente')}</p><p>Importe: ${fmt(kilos(x)*price(x))} · Comisión: <b>${fmt(x.status==='Anulado'?0:commission(x))}</b></p><div class="actions"><button class="secondary" onclick="edit('purchases','${r.id}')">Editar</button><button class="danger" onclick="remove('purchases','${r.id}')">Eliminar</button></div></div>`}).join('')||'<p>Sin compras.</p>'}</div>`}
+function toggleWeight(){if(!$('pMode'))return;let fixed=val('pMode')==='fixed';$('realWeight').classList.toggle('hidden',fixed);$('fixedWeight').classList.toggle('hidden',!fixed)}
+async function savePurchase(){let boxes=parseNum(val('pBoxes')),kg=parseNum(val('pKg')),kgBox=parseNum(val('pKgBox')),p=parseNum(val('pPrice')),mode=val('pMode');if(!val('pClient')||!val('pProduct')||!Number.isFinite(p)||p<0||Math.abs(Math.round(p*100)-p*100)>1e-8||!Number.isFinite(boxes)||boxes<0||(mode==='fixed'&&(!Number.isFinite(kgBox)||kgBox<=0||boxes<=0))||(mode==='real'&&(!Number.isFinite(kg)||kg<=0)))return toast('Comprueba cliente, producto, kilos, cajas y precio (máximo dos decimales).');let r=editing?.t==='purchases'?get('purchases',editing.id):null;try{await save('purchases',{...d(r),date:val('pDate'),clientId:val('pClient'),product:val('pProduct'),variety:val('pVariety'),supplier:val('pSupplier'),boxes,weightMode:mode,kg:Number.isFinite(kg)?kg:0,kgPerBox:Number.isFinite(kgBox)?kgBox:0,priceCents:Math.round(p*100),status:val('pStatus'),notes:val('pNotes')},r?.id);editing=null;render();toast('Compra sincronizada.');dance()}catch(e){toast(err(e))}}
+function commissions(){let map=new Map();for(let r of records.purchases){let x=d(r);if(x.status==='Anulado')continue;let key=x.date+'|'+x.clientId;let z=map.get(key)||{date:x.date,clientId:x.clientId,kg:0,amount:0};z.kg+=kilos(x);z.amount+=commission(x);map.set(key,z)}let rows=[...map.values()].sort((a,b)=>String(b.date).localeCompare(String(a.date)));return `<div class="card"><h2>Comisiones por cliente y día</h2><div class="big">${fmt(rows.reduce((a,r)=>a+r.amount,0))}</div><p>General: 0,035 €/kg. Cotelo y Naya: 0,04 €/kg para todos los productos. Ortega y Huerta: patatas y cebollas 0,02 €/kg. Ortega: ajos 0,02 €/kg.</p><p class="muted">Se calculan sobre los kilos registrados, reales o equivalentes por caja.</p></div><div class="card">${rows.map(r=>`<div class="item"><b>${esc(name(r.clientId))}</b><p>${esc(r.date)} · ${qty(r.kg)} kg</p><b>${fmt(r.amount)}</b></div>`).join('')||'<p>No hay liquidaciones.</p>'}</div>`}
+function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> ${esc(user?.email||'')}</p><p><b>Rol:</b> ${esc(role||'')}</p><p><b>Espacio:</b> ${esc(workspace||'')}</p><p><b>Última sincronización:</b> ${esc(lastSync?.toLocaleString('es-ES')||'Pendiente')}</p><div class="actions"><button class="primary" onclick="sync()">Sincronizar ahora</button><button class="secondary" onclick="exportData()">Exportar copia JSON</button><button class="danger" onclick="logout()">Cerrar sesión</button></div></div><div class="card"><h2>🥑 Aguacatín</h2><p>Saludos con voz y baile. La voz depende del navegador y no es una imitación exacta de ningún personaje.</p><button class="secondary" onclick="aguacatin()">Saludar</button></div><div class="card"><p class="muted">Sincronización por consulta cada 12 segundos. Los permisos y usuarios se gestionan en Supabase. Las equivalencias de peso fijo se introducen por compra hasta definirlas por producto.</p></div>`}
+function exportData(){let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),workspace,records},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Corredores_'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguacatín al habla! ¡Hoy repartimos frescura!','¡Vamos, equipo! ¡Las sandías no se venden solas!','¡Buenos días! ¡A por una jornada de fruta y verdura!','¡Que hoy salgan las cajas como churros!'];
+function dance(){let a=$('avo');a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
+function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.65;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
+async function init(){$('projectUrl').value=config.url;$('publicKey').value=config.key;if(!config.key)return;try{connect();let {data,error}=await api.auth.getUser();if(error||!data?.user)return;user=data.user;await enter()}catch(e){$('loginError').textContent=err(e)}}init();
+</script></body></html>
