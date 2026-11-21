@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SG Corredores</title>
+  <style>
+    body {
+      background: #101820;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 35px 15px;
+    }
+    h1 { color: #63d69c; }
+    button {
+      padding: 15px 25px;
+      border: 0;
+      border-radius: 10px;
+      background: #63d69c;
+      font-size: 17px;
+      cursor: pointer;
+    }
+    #resultado {
+      margin-top: 25px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>SG Corredores</h1>
+  <p>Gestión de frutas y verduras</p>
+  <button onclick="probar()">Probar conexión</button>
+  <p id="resultado"></p>
+
+  <script>
+    const URL_BASE =
+      "https://zyzcnosaavvcijsmcowq.supabase.co";
+
+    const API_KEY =
+      "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7";
+
+    async function probar() {
+      const resultado =
+        document.getElementById("resultado");
+
+      resultado.textContent = "Conectando...";
+
+      try {
+        const respuesta = await fetch(
+          URL_BASE +
+          "/rest/v1/sg_clients?select=id&limit=1",
+          {
+            headers: {
+              "apikey": API_KEY
+            }
+          }
+        );
+
+        if (respuesta.ok) {
+          resultado.textContent =
+            "API accesible. Conexión realizada.";
+        } else {
+          resultado.textContent =
+            "Respuesta de Supabase: " +
+            respuesta.status;
+        }
+      } catch (error) {
+        resultado.textContent =
+          "Error de conexión: " + error.message;
+      }
+    }
+  </script>
+</body>
+</html>
