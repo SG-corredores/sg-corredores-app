@@ -31,7 +31,7 @@ async function save(t,body,id){if(!api||!workspace||!user)throw Error('Sesión n
 async function remove(t,id){if(!confirm('¿Eliminar este registro?'))return;try{let {data,error}=await api.from(TABLES[t]).delete().eq('workspace_id',workspace).eq('id',id).select('id');if(error)throw error;if(!data?.length)throw Error('No se ha confirmado la eliminación.');editing=null;await sync();render();toast('Eliminado')}catch(e){toast(err(e))}}
 function go(p){page=p;editing=null;render()}function edit(t,id){editing={t,id};render();scrollTo(0,0)}function cancel(){editing=null;render()}
 function options(selected){return records.clients.map(r=>`<option value="${esc(r.id)}" ${r.id===selected?'selected':''}>${esc(d(r).name)}</option>`).join('')}
-function render(){if($('app').style.display==='none')return;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===page));$('content').innerHTML=({inicio:home,clientes:clients,pedidos:orders,compras:purchases,comisiones:commissions,ajustes:settings}[page]||home)();if(page==='compras')toggleWeight()}
+function render(){if(page==='facturas'){window.render();return;}if($('app').style.display==='none')return;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.textContent.toLowerCase()===page));$('content').innerHTML=({inicio:home,clientes:clients,pedidos:orders,compras:purchases,comisiones:commissions,ajustes:settings}[page]||home)();if(page==='compras')toggleWeight()}
 function rate(client,product){let c=norm(client),p=norm(product);if(c.includes('cotelo')||c.includes('naya'))return .04;if(c.includes('ortega')||c.includes('huerta')){if(p.includes('patata')||p.includes('cebolla'))return .02;if(c.includes('ortega')&&p.includes('ajo'))return .02}return .035}
 function kilos(x){return x.weightMode==='fixed'?Number(x.boxes||0)*Number(x.kgPerBox||0):Number(x.kg||0)}
 function commission(x){return kilos(x)*rate(name(x.clientId),x.product)}
@@ -52,4 +52,32 @@ const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguac
 function dance(){let a=$('avo');a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
 function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.65;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
 async function init(){$('projectUrl').value=config.url;$('publicKey').value=config.key;if(!config.key)return;try{connect();let {data,error}=await api.auth.getUser();if(error||!data?.user)return;user=data.user;await enter()}catch(e){$('loginError').textContent=err(e)}}init();
-</script></body></html>
+</script><!-- SG Corredores: módulo de borradores de facturas. Pegar antes de </body> -->
+<script>
+(function(){
+'use strict';
+const invoiceEsc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let invoiceRows=[], invoiceBusy=false;
+const originalGo=go, originalSync=sync, originalRender=render, originalEnter=enter;
+window.go=function(p){if(p==='facturas'){page=p;editing=null;window.render();loadInvoices();return;}originalGo(p)};
+window.render=function(){if(page==='facturas' && document.getElementById('app').style.display!=='none'){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.textContent.trim()==='Facturas'));document.getElementById('content').innerHTML=invoiceView();return;}originalRender()};
+window.sync=async function(silent=false){await originalSync(silent);if(page==='facturas')await loadInvoices()};
+const nav=document.getElementById('nav');const b=document.createElement('button');b.textContent='Facturas';b.onclick=()=>window.go('facturas');nav.insertBefore(b,nav.querySelector('button:last-child'));
+function invoiceView(){
+const clients=records.clients.map(r=>`<option value="${invoiceEsc(r.id)}">${invoiceEsc(d(r).name)}</option>`).join('');
+return `<div class="card"><h2>Facturas · borradores</h2><p class="muted">Los borradores no son facturas fiscales definitivas. El envío por correo está desactivado hasta configurar los datos fiscales y la conexión segura de Gmail.</p><label>Cliente</label><select id="invClient">${clients}</select><label>Correo del destinatario</label><input id="invEmail" type="email" placeholder="cliente@empresa.com"><label>Concepto</label><input id="invConcept" placeholder="Fruta y verdura"><div class="grid"><div><label>Cajas</label><input id="invBoxes" inputmode="decimal" placeholder="0"></div><div><label>Kilos</label><input id="invKg" inputmode="decimal" placeholder="0"></div><div><label>Precio por kilo (€)</label><input id="invPrice" inputmode="decimal" placeholder="0,65"></div><div><label>IVA (%)</label><input id="invVat" inputmode="decimal" value="0"></div></div><div class="actions"><button class="primary" onclick="saveInvoiceDraft()">Guardar borrador</button></div></div><div class="card"><h2>Borradores y autorizaciones</h2>${invoiceRows.map(r=>{let x=r.invoice_data||{},owner=role==='owner';return `<div class="item"><b>${invoiceEsc(r.customer_name)}</b><p>${invoiceEsc(x.concept||'Sin concepto')} · ${invoiceEsc(x.kg||0)} kg · ${invoiceEsc(x.boxes||0)} cajas</p><p>Precio: ${fmt((x.priceCents||0)/100)}/kg · Base: ${fmt((x.baseCents||0)/100)} · IVA: ${fmt((x.vatCents||0)/100)} · Total: <b>${fmt((x.totalCents||0)/100)}</b></p><p class="muted">${invoiceEsc(r.customer_email||'Sin correo')} · Estado: ${invoiceEsc(r.status)}</p>${owner&&r.status==='pending'?`<button class="secondary" onclick="approveInvoiceDraft('${r.id}')">Autorizar borrador (sin enviar)</button>`:''}</div>`}).join('')||'<p>No hay borradores.</p>'}</div>`;
+}
+window.loadInvoices=async function(){if(!api||!workspace||invoiceBusy)return;invoiceBusy=true;try{const {data,error}=await api.from('sg_invoices').select('id,customer_name,customer_email,invoice_data,status,created_at').eq('workspace_id',workspace).order('created_at',{ascending:false});if(error)throw error;invoiceRows=data||[];if(page==='facturas')window.render()}catch(e){toast('Facturas: '+err(e))}finally{invoiceBusy=false}};
+window.saveInvoiceDraft=async function(){try{
+if(!user||!workspace)throw Error('Inicia sesión.');const clientId=val('invClient'),customerName=name(clientId),email=val('invEmail'),concept=val('invConcept');const kg=parseNum(val('invKg')),boxes=parseNum(val('invBoxes')),p=parseNum(val('invPrice')),vat=parseNum(val('invVat'));
+if(!clientId||!concept||!email||!/^\S+@\S+\.\S+$/.test(email))throw Error('Indica cliente, concepto y correo válido.');
+if(!Number.isFinite(kg)||kg<=0||!Number.isFinite(boxes)||boxes<0||!Number.isFinite(p)||p<0||Math.abs(p*100-Math.round(p*100))>1e-8||!Number.isFinite(vat)||vat<0||vat>100)throw Error('Revisa kilos, cajas, precio de dos decimales e IVA.');
+const priceCents=Math.round(p*100),baseCents=Math.round(kg*priceCents),vatCents=Math.round(baseCents*vat/100),totalCents=baseCents+vatCents;
+const row={workspace_id:workspace,customer_name:customerName,customer_email:email,status:'pending',created_by:user.id,invoice_data:{clientId,concept,kg,boxes,priceCents,baseCents,vatPercent:vat,vatCents,totalCents}};
+const {error}=await api.from('sg_invoices').insert(row);if(error)throw error;toast('Borrador guardado. Pendiente de autorización.');await loadInvoices();
+}catch(e){toast(err(e))}};
+window.approveInvoiceDraft=async function(id){try{if(role!=='owner')throw Error('Solo el administrador puede autorizar.');if(!confirm('¿Autorizar este borrador? NO se enviará por correo ni se emitirá factura fiscal.'))return;const {data,error}=await api.from('sg_invoices').update({status:'approved',approved_by:user.id,approved_at:new Date().toISOString()}).eq('id',id).eq('workspace_id',workspace).eq('status','pending').select('id');if(error)throw error;if(!data?.length)throw Error('No se ha autorizado: comprueba permisos o estado.');toast('Borrador autorizado. Envío desactivado.');await loadInvoices()}catch(e){toast(err(e))}};
+})();
+</script>
+
+</body></html>
