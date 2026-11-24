@@ -639,4 +639,46 @@ const oldAsk=window.askAgu;window.askAgu=async function(){const msg=document.get
 window.sgAgu2={version:'2.0',logisticsQuery:answer};
 })();
 </script>
+
+<!-- SG Aguacatin: voice controls (browser native speech; no new API keys) -->
+<style>
+#sgVoicePanel{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:8px 5px;background:#eef9f0;border-radius:10px;margin-top:7px;font:12px system-ui;color:#154b29}
+#sgVoicePanel button{border:1px solid #aad1b2;background:white;border-radius:8px;padding:7px;cursor:pointer;color:#154b29}
+#sgVoicePanel button[aria-pressed="true"]{background:#187c3e;color:white}
+#sgVoicePanel select{max-width:125px;padding:6px;border:1px solid #aad1b2;border-radius:7px}
+</style>
+<script id="sg-voice-2">
+(function(){'use strict';
+ const bubble=document.getElementById('aguBubble'),controls=document.getElementById('aguControls');
+ if(!bubble||!controls||document.getElementById('sgVoicePanel'))return;
+ const supported=('speechSynthesis' in window)&&('SpeechSynthesisUtterance' in window);
+ const panel=document.createElement('div');panel.id='sgVoicePanel';
+ panel.innerHTML='<button type="button" id="sgVoiceToggle" aria-pressed="true">🔊 Voz activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1.05" selected>Normal</option><option value="1.2">Ágil</option></select><label for="sgVoiceVoice">Voz</label><select id="sgVoiceVoice"><option value="">Automática (español)</option></select>';
+ controls.appendChild(panel);
+ let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false';
+ const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),select=panel.querySelector('#sgVoiceVoice');
+ function refresh(){toggle.setAttribute('aria-pressed',String(enabled));toggle.textContent=enabled?'🔊 Voz activada':'🔇 Voz silenciada';}
+ refresh();
+ if(!supported){toggle.disabled=true;stop.disabled=true;toggle.textContent='Voz no disponible';return;}
+ let voices=[];
+ function loadVoices(){voices=speechSynthesis.getVoices().filter(v=>/^es(?:-|_)/i.test(v.lang));const prior=select.value;select.replaceChildren(new Option('Automática (español)',''));voices.forEach(v=>select.add(new Option(v.name+' · '+v.lang,v.voiceURI)));if(voices.some(v=>v.voiceURI===prior))select.value=prior;}
+ loadVoices();speechSynthesis.addEventListener?.('voiceschanged',loadVoices);
+ let last='';let pending=false;
+ function say(raw){
+  const text=String(raw||'').replace(/https?:\/\/\S+/g,'enlace').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim();
+  if(!enabled||!text||text===last||pending||/^(He oído:|🎙|Consultando inteligencia artificial|Te escucho|No he recibido una respuesta)/i.test(text))return;
+  last=text;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.slice(0,1600));u.lang='es-ES';u.rate=Number(rate.value)||1.05;u.pitch=1.3;
+  const chosen=voices.find(v=>v.voiceURI===select.value)||voices.find(v=>v.lang.toLowerCase()==='es-es')||voices[0];if(chosen)u.voice=chosen;
+  speechSynthesis.speak(u);
+ }
+ toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));if(!enabled)speechSynthesis.cancel();refresh();if(enabled)say('¡Voz activada! Dime qué necesitas.')});
+ stop.addEventListener('click',()=>speechSynthesis.cancel());
+ const observer=new MutationObserver(()=>{const t=bubble.textContent.trim();if(t&&t!==last)say(t)});
+ observer.observe(bubble,{childList:true,characterData:true,subtree:true});
+ // Stop Aguacatin speech before microphone activation so it does not hear itself.
+ const originalListen=window.aguListen;
+ if(typeof originalListen==='function')window.aguListen=function(){speechSynthesis.cancel();last='';return originalListen.apply(this,arguments)};
+ // No background listening. Microphone only runs when user presses the existing button.
+})();
+</script>
 </body></html>
