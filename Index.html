@@ -599,4 +599,44 @@ window.sgGo=function(p){if(p==='pales'&&workspace)reload().then(()=>render());re
 if(workspace)reload();
 })();
 </script>
+<script id="sg-aguacatin-2">
+(()=>{'use strict';
+/* Aguacatín 2.0: contextual read-only logistics queries. No data mutations. */
+const normalize=t=>String(t||'').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();
+const say=t=>{const b=document.getElementById('aguBubble'),l=document.getElementById('aguLine');if(b)b.textContent=t;if(l)l.textContent=t;document.getElementById('aguFloat')?.classList.add('aguExpanded');if(document.getElementById('aguControls'))document.getElementById('aguControls').hidden=false;if(typeof aguSay==='function')aguSay(t)};
+let lastClient='',lastDate='',lastResponse='',busy=false;
+const d=r=>r?.data||{};
+function getDate(t){const z=normalize(t),now=new Date();if(z.includes('mañana'))now.setDate(now.getDate()+1);else if(z.includes('ayer'))now.setDate(now.getDate()-1);const m=t.match(/\b(20\d\d)-(\d\d)-(\d\d)\b/);return m?m[0]:[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')}
+async function answer(message){
+ const q=normalize(message);if(!/pale|palet|camion|hueco|carga/.test(q))return null;
+ if(!/cuanto|cuantos|dime|resumen|distribucion|reparte|quedan|libre|lleva|tiene|pendiente|preparado|cargado|cliente|camion|pale|palet/.test(q))return null;
+ if(!api||!workspace||!user)return 'Inicia sesión para consultar los palés y camiones.';
+ if(busy)return 'Estoy terminando la consulta anterior.';busy=true;
+ try{
+  const date=/(ese dia|mismo dia|y de ese dia)/.test(q)&&lastDate?lastDate:getDate(message);
+  const [pr,tr,cr]=await Promise.all([api.from('sg_pallets').select('id,data').eq('workspace_id',workspace),api.from('sg_trucks').select('id,data').eq('workspace_id',workspace),api.from('sg_clients').select('id,data').eq('workspace_id',workspace)]);
+  if(pr.error||tr.error||cr.error)throw Error((pr.error||tr.error||cr.error).message);
+  const pallets=(pr.data||[]).filter(x=>d(x).date===date),trucks=(tr.data||[]).filter(x=>d(x).date===date),clients=cr.data||[];
+  const cname=id=>{const x=clients.find(c=>String(c.id)===String(id));return String(d(x).name||d(x).nombre||x?.name||id||'Sin cliente')};
+  const names=[...new Set(pallets.map(x=>cname(d(x).clientId)))];let client=names.find(n=>q.includes(normalize(n)));if(!client&&/ese cliente|este cliente|sus pales|sus palets/.test(q)&&lastClient)client=lastClient;
+  const selected=client?pallets.filter(x=>cname(d(x).clientId)===client):pallets;
+  const count=arr=>arr.length;
+  const status=(arr,key)=>arr.filter(x=>normalize(d(x).status)===key).length;
+  const mixed=arr=>arr.filter(x=>(d(x).items||[]).length>1).length;
+  const byTruck=t=>selected.filter(x=>d(x).truckId===t.id);
+  const lines=[];
+  if(/camion|hueco|espacio|capacidad|reparte|distribucion/.test(q)){
+   for(const t of trucks){const all=pallets.filter(x=>d(x).truckId===t.id),mine=byTruck(t),cap=Number(d(t).capacity)||26;lines.push(`${d(t).name||'Camión'}: ${all.length}/${cap} palés; ${Math.max(0,cap-all.length)} huecos libres${client?`; ${mine.length} de ${client}`:''}`)}
+   if(!trucks.length)lines.push('No hay camiones registrados para esa fecha');
+   lines.push(`Sin camión asignado: ${selected.filter(x=>!d(x).truckId).length} palés`);
+  }else if(client){lines.push(`${client}: ${count(selected)} palés (${status(selected,'cargado')} cargados, ${status(selected,'preparado')} preparados, ${status(selected,'previsto')} previstos; ${mixed(selected)} mixtos)`)}
+  else{for(const n of names){const arr=pallets.filter(x=>cname(d(x).clientId)===n);lines.push(`${n}: ${arr.length} palés, ${status(arr,'cargado')} cargados, ${status(arr,'preparado')} preparados, ${mixed(arr)} mixtos`)}if(!names.length)lines.push('No hay palés registrados')}
+  lastClient=client||'';lastDate=date;lastResponse=`Carga del ${date}. ${lines.join('. ')}. Total: ${selected.length} palés${client?' de '+client:''}.`;return lastResponse;
+ }catch(e){return 'No puedo confirmar los datos de carga: '+(e.message||String(e))}finally{busy=false}
+}
+const oldSend=window.aguSend;window.aguSend=async function(){const el=document.getElementById('aguFloatInput'),msg=el?.value?.trim();if(!msg)return oldSend?.();const a=await answer(msg);if(a===null)return oldSend?.();el.value='';say(a)};
+const oldAsk=window.askAgu;window.askAgu=async function(){const msg=document.getElementById('aguQuestion')?.value?.trim();if(!msg)return oldAsk?.();const a=await answer(msg);if(a===null)return oldAsk?.();say(a)};
+window.sgAgu2={version:'2.0',logisticsQuery:answer};
+})();
+</script>
 </body></html>
