@@ -777,4 +777,40 @@ window.aguListen=()=>{if(active){stop();return;}active=true;failures=0;button.hi
 window.openAgu=()=>{floating.classList.add('aguExpanded');document.getElementById('aguControls').hidden=false;if(!active)window.aguListen();};
 window.closeAgu=()=>{stop();document.getElementById('sgVoiceStop')?.click();close?.();};button.onclick=()=>{stop();document.getElementById('sgVoiceStop')?.click();};document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
 })();
+</script><script id="sg-agent-8">(()=>{
+let pending=null,busy=false;
+const norm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const say=s=>{const b=$('aguBubble');b.textContent='';b.textContent=s;};
+const cancel=window.sgCancelPendingOrder;window.sgCancelPendingOrder=()=>{pending=null;cancel?.();};
+function validate(a){
+ if(!a||typeof a!=='object')throw Error('Operación inválida');
+ const create=a.tipo==='crear'||a.action==='crear'||a.accion==='crear';
+ const type=a.tipo||a.action||a.accion;
+ if(!create&&!['modificar','cancelar'].includes(type))throw Error('Operación no admitida');
+ const r=create?null:records.orders.find(r=>r.id===a.id);
+ if(!create&&!r)throw Error('No encuentro el pedido');
+ const x=create?{variety:'',notes:'',status:'Pendiente'}:{...d(r)};
+ const changes=create?a:(a.cambios||a);
+ for(const k of ['clientId','product','boxes','quantityUnit','date','price','priceUnit'])if(Object.hasOwn(changes,k))x[k]=changes[k];
+ if(type==='cancelar')x.status='Cancelado';
+ if(!records.clients.some(r=>r.id===x.clientId)||typeof x.product!=='string'||!x.product.trim()||!Number.isFinite(x.boxes)||x.boxes<=0||!['cajas','pales'].includes(x.quantityUnit)||!/^\d{4}-\d{2}-\d{2}$/.test(x.date))throw Error('Faltan datos válidos del pedido');
+ x.price=x.price??null;x.priceUnit=x.priceUnit||'kg';if(!['kg','caja'].includes(x.priceUnit)|| (x.price!==null&&(!Number.isFinite(x.price)||x.price<0||Math.abs(x.price*100-Math.round(x.price*100))>1e-8)))throw Error('Precio inválido');x.priceCents=x.price===null?null:Math.round(x.price*100);
+ return {type,id:r?.id,data:x,original:r?JSON.stringify(d(r)):null};
+}
+async function run(msg){if(busy)return;busy=true;try{
+ if(!user||role!=='owner'||user.is_anonymous)throw Error('Necesitas acceso de administrador');
+ if(pending&&(pending.uid!==user.id||pending.workspace!==workspace||Date.now()>pending.expires))pending=null;
+ const q=norm(msg).replace(/[.!?¿¡]/g,'');
+ if(pending&&/^(no|cancela|cancelar|no lo guardes)$/.test(q)){pending=null;say('De acuerdo, no guardo nada.');return;}
+ if(pending&&/^(si|si guardalo|guarda|guardalo|confirmo|confirmar|adelante|vale|correcto)$/.test(q)){
+ const batch=pending;pending=null;let done=0;try{for(const a of batch.ops){if(a.id){const {data,error}=await api.from(TABLES.orders).select('data').eq('workspace_id',workspace).eq('id',a.id).single();if(error||JSON.stringify(data.data)!==a.original)throw Error('El pedido ha cambiado; vuelve a solicitarlo');}await save('orders',a.data,a.id);done++;}render();say(`Guardadas ${done} operaciones correctamente.`);}catch(e){say(`Guardadas ${done} de ${batch.ops.length} operaciones. ${e.message}. Revisa los pedidos antes de repetir.`);}return;}
+ const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión');
+ const response=await api.functions.invoke('Sg-aguacatin',{body:{mensaje:msg,agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
+ if(response.error||!response.data?.ok)throw Error('No he podido interpretar la orden. Comprueba Supabase.');
+ const result=response.data;let text=result.respuesta;
+ if(Array.isArray(result.acciones)&&result.acciones.length){if(result.acciones.length>20)throw Error('Máximo 20 operaciones por lote');const ops=result.acciones.map(validate);pending={uid:user.id,workspace,expires:Date.now()+120000,ops,raw:result.acciones};text=ops.map(a=>`${a.type}: ${a.data.boxes} ${a.data.quantityUnit==='pales'?'palés':'cajas'} de ${a.data.product} para ${d(records.clients.find(r=>r.id===a.data.clientId)).name}, fecha ${a.data.date}${a.data.price===null?'':', precio '+a.data.price+' euros por '+a.data.priceUnit}`).join('. ')+'. ¿Confirmas?';}else{pending=null;}
+ window.sgAguHistory?.add(msg,text);say(text);
+ }catch(e){pending=null;say(e.message||'No he podido completar la operación');}finally{busy=false;}}
+window.aguSend=async()=>{const el=$('aguFloatInput'),msg=el.value.trim();if(!msg||busy)return;el.value='';await run(msg);};window.askAgu=async()=>{const msg=$('aguQuestion')?.value.trim();if(msg)await run(msg);};
+})();
 </script></body></html>
