@@ -273,4 +273,27 @@ if(editingRow){$('pProduct').parentElement.style.display='';$('pVariety').parent
 render=function(){original();simplify();if(page==='compras'){for(const b of document.querySelectorAll('#content button')){const a=b.getAttribute('onclick')||'';if(a.startsWith("edit('purchases',")){const w=document.createElement('button');w.className='secondary';w.textContent='Registrar carga';w.onclick=()=>{window.sgWeightEdit=true;try{b.click()}finally{window.sgWeightEdit=false}};b.after(w)}}}};
 savePurchase=async function(){if(page==='compras'&&$('pOrder')&&$('pProduct').parentElement.style.display==='none'){const r=get('orders',val('pOrder'));if(!r&& !editing)return toast('Selecciona el producto del pedido.');if(r){const x=d(r);$('pClient').value=x.clientId;$('pDate').value=x.date;$('pProduct').value=x.product;$('pVariety').value=x.variety||'';if(val('pBoxes')==='')$('pBoxes').value=x.quantityUnit==='pales'?0:Math.max(0,Number(x.boxes||0)-records.purchases.filter(p=>d(p).orderId===r.id&&d(p).status!=='Anulado').reduce((a,p)=>a+Number(d(p).boxes||0),0));}}return oldSave()};
 })();
+</script><script>
+(function(){
+const key='BCvz5jix5PFZw4FIDBwJn-1_zSbjDRzWihKTvR7gvYK_xPOOTlN2w6Jdp6ngTKijnpAJ5bhPFNA_tWfF0wWCUj4';
+const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='🔔 Activar notificaciones';button.style.cssText='margin:8px 0;color:#123b27;background:#fff;border-radius:8px;padding:9px 12px';
+const status=document.createElement('div');status.setAttribute('role','status');status.style.cssText='font-size:13px;color:white;white-space:normal';document.querySelector('#app header').append(button,status);
+function bytes(s){return Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0))}
+async function registration(){await navigator.serviceWorker.register('./sw.js');return await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('El servicio de notificaciones no está listo. Recarga la aplicación.')),15000))]);}
+button.onclick=async()=>{button.disabled=true;try{
+if(!user||!workspace||!api)throw Error('Inicia sesión primero.');
+if(!('Notification' in window)||!('PushManager' in window)||!('serviceWorker' in navigator))throw Error('Instala SG Corredores en la pantalla de inicio y ábrela desde allí.');
+const permission=await Notification.requestPermission();if(permission!=='granted')throw Error('Permite las notificaciones en los ajustes del móvil.');
+const reg=await registration();let sub=await reg.pushManager.getSubscription();const k=bytes(key);
+if(sub&&(!sub.options.applicationServerKey||String(new Uint8Array(sub.options.applicationServerKey))!==String(k))){await api.from('sg_push_subscriptions').delete().eq('endpoint',sub.endpoint).eq('user_id',user.id);await sub.unsubscribe();sub=null;}
+if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:k});
+const {error}=await api.from('sg_push_subscriptions').upsert({workspace_id:workspace,user_id:user.id,endpoint:sub.endpoint,subscription:sub.toJSON()},{onConflict:'endpoint'});if(error)throw error;
+button.textContent='🔔 Notificaciones registradas';status.textContent='Móvil registrado. Pendiente de comprobar el envío desde Supabase.';
+}catch(e){status.textContent='No se pudo activar: '+(e.message||String(e));}finally{button.disabled=false;}};
+const off=document.createElement('button');off.type='button';off.className='secondary';off.textContent='Desactivar avisos';off.style.cssText=button.style.cssText+';margin-left:6px';button.after(off);
+async function disable(){if(!('serviceWorker' in navigator)||!api||!user)return;const reg=await navigator.serviceWorker.getRegistration();const sub=await reg?.pushManager?.getSubscription();if(sub){const {error}=await api.from('sg_push_subscriptions').delete().eq('endpoint',sub.endpoint).eq('user_id',user.id);if(error)throw error;await sub.unsubscribe();}button.textContent='🔔 Activar notificaciones';status.textContent='Avisos desactivados.';}
+off.onclick=async()=>{try{await disable()}catch(e){status.textContent=e.message||String(e)}};
+const previousLogout=logout;logout=async function(){try{await disable()}catch(e){status.textContent='No se pudo desactivar el dispositivo: '+e.message;return;}return previousLogout.apply(this,arguments)};
+})();
+
 </script></body></html>
