@@ -648,37 +648,52 @@ window.sgAgu2={version:'2.0',logisticsQuery:answer};
 #sgVoicePanel select{max-width:125px;padding:6px;border:1px solid #aad1b2;border-radius:7px}
 </style>
 <script id="sg-voice-2">
-(function(){'use strict';
- const bubble=document.getElementById('aguBubble'),controls=document.getElementById('aguControls');
- if(!bubble||!controls||document.getElementById('sgVoicePanel'))return;
- const supported=('speechSynthesis' in window)&&('SpeechSynthesisUtterance' in window);
- const panel=document.createElement('div');panel.id='sgVoicePanel';
- panel.innerHTML='<button type="button" id="sgVoiceToggle" aria-pressed="true">🔊 Voz activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1.05" selected>Normal</option><option value="1.2">Ágil</option></select><label for="sgVoiceVoice">Voz</label><select id="sgVoiceVoice"><option value="">Automática (español)</option></select>';
- controls.appendChild(panel);
- let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false';
- const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),select=panel.querySelector('#sgVoiceVoice');
- function refresh(){toggle.setAttribute('aria-pressed',String(enabled));toggle.textContent=enabled?'🔊 Voz activada':'🔇 Voz silenciada';}
- refresh();
- if(!supported){toggle.disabled=true;stop.disabled=true;toggle.textContent='Voz no disponible';return;}
- let voices=[];
- function loadVoices(){voices=speechSynthesis.getVoices().filter(v=>/^es(?:-|_)/i.test(v.lang));const prior=select.value;select.replaceChildren(new Option('Automática (español)',''));voices.forEach(v=>select.add(new Option(v.name+' · '+v.lang,v.voiceURI)));if(voices.some(v=>v.voiceURI===prior))select.value=prior;}
- loadVoices();speechSynthesis.addEventListener?.('voiceschanged',loadVoices);
- let last='';let pending=false;
- function say(raw){
-  const text=String(raw||'').replace(/https?:\/\/\S+/g,'enlace').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim();
-  if(!enabled||!text||text===last||pending||/^(He oído:|🎙|Consultando inteligencia artificial|Te escucho|No he recibido una respuesta)/i.test(text))return;
-  last=text;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text.slice(0,1600));u.lang='es-ES';u.rate=Number(rate.value)||1.05;u.pitch=1.3;
-  const chosen=voices.find(v=>v.voiceURI===select.value)||voices.find(v=>v.lang.toLowerCase()==='es-es')||voices[0];if(chosen)u.voice=chosen;
-  speechSynthesis.speak(u);
+(function(){
+'use strict';
+const bubble=document.getElementById('aguBubble'),controls=document.getElementById('aguControls');
+if(!bubble||!controls)return;
+document.getElementById('sgVoicePanel')?.remove();
+const panel=document.createElement('div');panel.id='sgVoicePanel';
+panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz natural activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="cheerful">🥑 Aguacatín alegre</option><option value="natural">Natural</option></select>';
+controls.appendChild(panel);
+const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),style=panel.querySelector('#sgVoiceVoice');
+let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',last='',serial=0,audio=null,objectUrl=null;
+function refresh(){toggle.textContent=enabled?'🔊 Voz natural activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
+function halt(){serial++;try{audio?.pause();if(audio)audio.src='';}catch{}audio=null;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;try{speechSynthesis.cancel()}catch{}}
+function clean(s){return String(s||'').replace(/https?:\/\/\S+/g,'enlace').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim().slice(0,1800)}
+async function say(raw){
+ const text=clean(raw);
+ if(!enabled||!text||text===last||/^(He oído:|Consultando inteligencia artificial|Te escucho|No he recibido una respuesta)/i.test(text))return;
+ last=text;halt();const request=serial;
+ try{
+  const base=(typeof config!=='undefined'&&config.url)||'';
+  const key=(typeof config!=='undefined'&&config.key)||'';
+  if(!base||!key||typeof api==='undefined'||!api)throw Error('Sin conexión');
+  const {data:{session}}=await api.auth.getSession();
+  if(!session?.access_token)throw Error('Inicia sesión');
+  const response=await fetch(base.replace(/\/$/,'')+'/functions/v1/sg-aguacatin-voz',{
+   method:'POST',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+session.access_token},
+   body:JSON.stringify({text,style:style.value})
+  });
+  if(!response.ok)throw Error('Voz no disponible ('+response.status+')');
+  const blob=await response.blob();if(request!==serial)return;
+  objectUrl=URL.createObjectURL(blob);audio=new Audio(objectUrl);audio.playbackRate=Number(rate.value)||1;
+  audio.onended=()=>{if(request===serial){URL.revokeObjectURL(objectUrl);objectUrl=null;audio=null;}};
+  await audio.play();
+ }catch(e){
+  if(request!==serial)return;
+  console.warn('Aguacatín: voz natural',e);
+  // Si falla el servicio, mostrar el fallo en el botón en vez de fingir que la voz es natural.
+  toggle.textContent='⚠️ Voz natural no disponible';
  }
- toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));if(!enabled)speechSynthesis.cancel();refresh();if(enabled)say('¡Voz activada! Dime qué necesitas.')});
- stop.addEventListener('click',()=>speechSynthesis.cancel());
- const observer=new MutationObserver(()=>{const t=bubble.textContent.trim();if(t&&t!==last)say(t)});
- observer.observe(bubble,{childList:true,characterData:true,subtree:true});
- // Stop Aguacatin speech before microphone activation so it does not hear itself.
- const originalListen=window.aguListen;
- if(typeof originalListen==='function')window.aguListen=function(){speechSynthesis.cancel();last='';return originalListen.apply(this,arguments)};
- // No background listening. Microphone only runs when user presses the existing button.
+}
+refresh();
+toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));halt();last='';refresh();if(enabled)say('¡Hola! Soy Aguacatín. ¿Qué necesitas?')});
+stop.addEventListener('click',()=>{halt();last=''});
+let debounce;
+new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>{const t=bubble.textContent.trim();if(t&&t!==last)say(t)},180)}).observe(bubble,{childList:true,characterData:true,subtree:true});
+const oldListen=window.aguListen;
+if(typeof oldListen==='function')window.aguListen=function(){halt();last='';return oldListen.apply(this,arguments)};
 })();
 </script>
 </body></html>
