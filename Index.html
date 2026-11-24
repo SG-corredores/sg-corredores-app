@@ -211,7 +211,26 @@ function siInterpret(t){
  return matches.map((m,i)=>{let product=t.slice(m.index+m[0].length,matches[i+1]?.index??t.length).trim().replace(/[,;\s]+$/,'').replace(/\s+Gracias[.!]*$/i,'');let unit=m[2]?(/^p/i.test(m[2])?'pales':'cajas'):'';return [product,m[1],'',unit]}).filter(x=>x[0]);
 }
 el('siParse').type='button';el('siParse').onclick=()=>{const status=el('siStatus');status.textContent='Interpretando…';try{const t=el('siText').value.trim();if(!t){status.textContent='Pega primero un mensaje.';return}const found=siInterpret(t);if(!found.length){status.textContent='No se detectaron líneas. Prueba: 50 cajas de tomate, 30 cajas de pimiento. Puedes añadir líneas manualmente.';return}if(rows.children.length&&!confirm('¿Sustituir las líneas actuales?')){status.textContent='Se mantienen las líneas anteriores.';return}rows.replaceChildren();for(const m of found)add(...m);status.textContent=found.length+' líneas detectadas. Revisa cantidades y unidades antes de guardar. Selecciona cajas o palés en cantidades de 1 a 5.';try{const clients=records.clients.filter(r=>d(r).name&&norm(t).includes(norm(d(r).name)));if(clients.length===1)el('siClient').value=clients[0].id}catch(e){}rows.scrollIntoView({block:'nearest'});}catch(e){status.textContent='Error al interpretar: '+String(e.message||e)}};
-el('siSave').onclick=async()=>{const clientId=el('siClient').value,date=el('siDate').value;const list=[...rows.children].map(r=>({product:r.querySelector('.ip').value.trim(),boxes:parseNum(r.querySelector('.ib').value),raw:r.querySelector('.ic').value.trim(),unit:r.querySelector('.iu').value,row:r}));if(!clientId||!date||!list.length||list.some(x=>!x.product||!Number.isFinite(x.boxes)||x.boxes<=0||!sgUnitValid(x.unit))){el('siStatus').textContent='Completa cliente, fecha, producto, cantidad y unidad de cada línea.';return}if(!confirm('¿Guardar '+list.length+' líneas de pedido reales?'))return;const b=el('siSave');b.disabled=true;let n=0;try{for(const x of list){await save('orders',{clientId,date,product:x.product,variety:'',boxes:x.boxes,quantityUnit:x.unit,priceCents:null,status:'Pendiente',notes:'',sourceMessage:el('siText').value});x.row.remove();n++}el('siStatus').textContent=n+' líneas guardadas.';modal.style.display='none';sgNavClient=clientId;sgNavDate=date;sgGo('pedidos')}catch(e){el('siStatus').textContent=n+' líneas confirmadas. Revisa pedidos antes de reintentar: '+err(e)}finally{b.disabled=false}};
+el('siSave').type='button';
+el('siSave').onclick=async()=>{
+ const b=el('siSave'), status=el('siStatus');if(b.disabled)return;
+ const clientId=el('siClient').value,date=el('siDate').value;
+ function warn(msg,target){status.textContent=msg;toast(msg);if(target){target.scrollIntoView({block:'center'});target.focus()}}
+ if(!clientId)return warn('Selecciona el cliente antes de guardar.',el('siClient'));
+ if(!date)return warn('Selecciona la fecha del pedido.',el('siDate'));
+ const list=[...rows.children].map(r=>({product:r.querySelector('.ip').value.trim(),boxes:parseNum(r.querySelector('.ib').value),unit:r.querySelector('.iu').value,row:r}));
+ if(!list.length)return warn('Interpreta el texto o añade una línea primero.');
+ for(const [i,x] of list.entries()){
+ if(!x.product)return warn('Falta el producto en la línea '+(i+1),x.row.querySelector('.ip'));
+ if(!Number.isFinite(x.boxes)||x.boxes<=0)return warn('Cantidad incorrecta en la línea '+(i+1),x.row.querySelector('.ib'));
+ if(!sgUnitValid(x.unit))return warn('Selecciona cajas o palés en la línea '+(i+1)+' ('+x.product+').',x.row.querySelector('.iu'));
+ }
+ b.disabled=true;el('siClose').disabled=true;el('siParse').disabled=true;el('siAdd').disabled=true;let n=0;
+ try{for(const x of list){status.textContent='Guardando '+(n+1)+' de '+list.length+'…';await save('orders',{clientId,date,product:x.product,variety:'',boxes:x.boxes,quantityUnit:x.unit,priceCents:null,price:null,status:'Pendiente',notes:'',sourceMessage:el('siText').value});x.row.remove();n++}}
+ catch(e){warn(n+' líneas guardadas. Quedan '+(list.length-n)+' pendientes. Error: '+err(e));return}
+ finally{b.disabled=false;el('siClose').disabled=false;el('siParse').disabled=false;el('siAdd').disabled=false}
+ status.textContent=n+' líneas guardadas correctamente.';el('siText').value='';modal.style.display='none';sgNavClient=clientId;sgNavDate=date;toast(n+' líneas guardadas y sincronizadas.');try{sgGo('pedidos')}catch(e){toast('Pedido guardado. Abre Pedidos para consultarlo.')} 
+};
 const controls=el('aguControls');if(controls){const b=document.createElement('button');b.type='button';b.textContent='📥 Importar pedido';b.onclick=()=>{closeAgu();sgImportOpen()};controls.append(b)}
 })();
 
