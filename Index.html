@@ -89,7 +89,7 @@ async function init(){ $('projectUrl').value=config.url;$('publicKey').value=con
 <script>
 const aguPhrases=['¡Aquí estoy, más fresco que una lechuga con aire acondicionado!','¡Hoy vendemos hasta las pepitas de la sandía!','¡Los tomates están rojos de ver cuánto trabajamos!','¡Que no se nos duerma ni una alcachofa!','¡A vender, que las cajas no se mueven solas!','¡Estoy tan en forma que hasta los pepinos me tienen envidia!','¡Cuidado con las cebollas, que hoy no estamos para llorar!','¡Vamos al lío, que los melones no se colocan solos!'];
 let aguLast=-1;
-function aguSay(s){let i;if(s){$('aguLine').textContent=s}else{do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);aguLast=i;$('aguLine').textContent=aguPhrases[i]}if('speechSynthesis'in window){speechSynthesis.cancel();let u=new SpeechSynthesisUtterance($('aguLine').textContent);u.lang='es-ES';u.pitch=1.8;u.rate=1.12;speechSynthesis.speak(u)}}
+function aguSay(s){let i;if(s){$('aguLine').textContent=s}else{do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);aguLast=i;$('aguLine').textContent=aguPhrases[i]}if('speechSynthesis'in window){speechSynthesis.cancel();let vozTexto=$('aguLine').textContent.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/\s+/g,' ').trim();if(vozTexto){let u=new SpeechSynthesisUtterance(vozTexto);u.lang='es-ES';u.pitch=1.8;u.rate=1.12;speechSynthesis.speak(u)}}}
 function openAgu(){$('aguModal').style.display='flex';aguSay()}
 function closeAgu(){$('aguModal').style.display='none';if('speechSynthesis'in window)speechSynthesis.cancel()}
 function sgArticleAnswer(raw){
@@ -151,7 +151,23 @@ function stopVoice(){if(recognition){try{recognition.abort()}catch(e){}recogniti
 window.openAgu=function(){floating.classList.add('aguExpanded');document.getElementById('aguControls').hidden=false;reply('¡Aquí estoy! Te escucho.');window.aguListen()};
 window.closeAgu=function(){stopVoice();floating.classList.remove('aguExpanded');document.getElementById('aguControls').hidden=true;if('speechSynthesis'in window)speechSynthesis.cancel()};
 window.aguListen=function(){stopVoice();const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){reply('El reconocimiento de voz no está disponible en este navegador. Puedes escribirme.');return}try{recognition=new SR();recognition.lang='es-ES';recognition.continuous=false;recognition.interimResults=false;recognition.onresult=function(e){let t=e.results[0][0].transcript;document.getElementById('aguFloatInput').value=t;reply('He oído: '+t);floating.classList.remove('aguListening');window.aguSend()};recognition.onerror=function(e){floating.classList.remove('aguListening');reply(e.error==='not-allowed'?'Permite el micrófono en tu navegador.':'No he podido escucharte. Prueba otra vez.')};recognition.onend=function(){floating.classList.remove('aguListening')};recognition.start();floating.classList.add('aguListening');reply('🎙 Te escucho...')}catch(e){reply('No se ha podido activar el micrófono.')}};
-window.aguSend=function(){const input=document.getElementById('aguFloatInput');const t=input.value.trim();if(!t)return;if(sgArticleAnswer(t)===null && window.sgDemoPedido(t)){input.value='';return}document.getElementById('aguQuestion').value=t;try{askAgu();reply(document.getElementById('aguLine').textContent)}catch(e){reply('No he podido procesar esa consulta.')}input.value=''};
+let sending=false;
+window.aguSend=async function(){
+ const input=document.getElementById('aguFloatInput');
+ const t=input.value.trim();
+ if(!t||sending)return;
+ if(sgArticleAnswer(t)===null && window.sgDemoPedido(t)){input.value='';return;}
+ sending=true;
+ input.value='';
+ document.getElementById('aguQuestion').value=t;
+ reply('Consultando inteligencia artificial…');
+ try{
+  await Promise.resolve(askAgu());
+  const answer=document.getElementById('aguLine').textContent.trim();
+  reply(answer&&answer!=='Consultando inteligencia artificial…'?answer:'No he recibido una respuesta. Inténtalo de nuevo.');
+ }catch(e){reply('No he podido procesar esa consulta: '+(e?.message||'Error desconocido'));}
+ finally{sending=false;}
+};
 // Wake-word detection requires an active browser listening session; no background microphone is claimed.
 })();
 </script>
