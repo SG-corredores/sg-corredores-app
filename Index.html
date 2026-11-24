@@ -610,7 +610,8 @@ const d=r=>r?.data||{};
 function getDate(t){const z=normalize(t),now=new Date();if(z.includes('mañana'))now.setDate(now.getDate()+1);else if(z.includes('ayer'))now.setDate(now.getDate()-1);const m=t.match(/\b(20\d\d)-(\d\d)-(\d\d)\b/);return m?m[0]:[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')}
 async function answer(message){
  const q=normalize(message);if(!/pale|palet|camion|hueco|carga/.test(q))return null;
- if(!/cuanto|cuantos|dime|resumen|distribucion|reparte|quedan|libre|lleva|tiene|pendiente|preparado|cargado|cliente|camion|pale|palet/.test(q))return null;
+ if(/\b(apunta|apuntame|anota|anotame|pon|ponle|ponme|crea|prepara|registra|agrega|anade|mete|pide|pedir)\b/.test(q))return null;
+ if(!/\b(cuanto|cuantos|cuantas|dime|resumen|distribucion|quedan|libre|lleva|tiene|pendiente|preparado|cargado|consulta|muestra)\b/.test(q))return null;
  if(!api||!workspace||!user)return 'Inicia sesión para consultar los palés y camiones.';
  if(busy)return 'Estoy terminando la consulta anterior.';busy=true;
  try{
@@ -706,7 +707,7 @@ const say=s=>{ $('aguBubble').textContent=s; $('aguLine').textContent=s; $('aguF
 const number=s=>Number(s.replace(',','.'));
 async function handle(raw){
  const q=n(raw).replace(/^(?:oye\s+)?aguacatin[, ]*/,'');
- const create=/^(crea|prepara|anota|apunta|haz|registra|nuevo|ponle|pon|anade|agrega)\b/.test(q)&&/\b(pedido|cajas?|palets?|pales?)\b/.test(q)&&!/\b(carga|cargado|cargadas|precio)\b/.test(q);
+ const create=/\b(crea|prepara|anota|anotame|apunta|apuntame|haz|registra|nuevo|ponle|ponme|pon|anade|agrega|mete|pide|pedir)\b/.test(q)&&/\b(pedidos?|cajas?|palets?|pales?|pallets?)\b/.test(q)&&!/\b(carga|cargado|cargadas)\b/.test(q)&&!/^\s*(cuantos?|cuantas?|que|cual|dime)\b/.test(q);
  const change=/^(cambia|modifica|actualiza|pon)\b/.test(q)&&/\bprecio\b/.test(q);
  const load=/^(registra|anota|apunta|carga|confirma)\b/.test(q)&&/\b(carga|cargadas|cargado|carga parcial|cajas|kilos)\b/.test(q)&&!create;
  if(!create&&!change&&!load)return false;
@@ -718,7 +719,7 @@ async function handle(raw){
  if(!$('status').textContent.startsWith('●'))throw Error('No se han podido actualizar los datos.');
  const tokens=x=>n(x).split(/[^a-z0-9]+/).filter(Boolean); const qt=tokens(q); const full=records.clients.filter(r=>(' '+qt.join(' ')+' ').includes(' '+tokens(d(r).name).join(' ')+' ')); const matches=full.length?full:records.clients.filter(r=>tokens(d(r).name).some(w=>w.length>=3&&qt.includes(w)&&!['para','del','los','las','san','una','dos','tres','caja','cajas','palet','pales','patatas','cebollas'].includes(w))); 
  const client=matches.length===1?matches[0]:null;
- const nums={un:1,una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10}; const amount=q.match(/\b(\d+(?:[.,]\d+)?|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s*(cajas?|pales?|palets?)\b/); const qty=amount?(nums[amount[1]]??number(amount[1])):0;
+ const nums={un:1,una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10}; const amount=q.match(/\b(\d+(?:[.,]\d+)?|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s*(cajas?|pales?|palets?|pallets?)\b/); const qty=amount?(nums[amount[1]]??number(amount[1])):0;
  const pm=q.match(/\b(?:a|al|precio(?:\s+de)?|por)\s+(\d+(?:[.,]\d{1,2})?)(?![\d.,])\s*(?:euros?|€)?/);
  const p=pm?number(pm[1]):null;
  const unit=/por caja|\/caja/.test(q)?'caja':/por kilo|por kg|\/kg/.test(q)?'kg':null;
