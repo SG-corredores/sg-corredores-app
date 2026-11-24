@@ -94,7 +94,7 @@ function openAgu(){$('aguModal').style.display='flex';aguSay()}
 function closeAgu(){$('aguModal').style.display='none';if('speechSynthesis'in window)speechSynthesis.cancel()}
 function sgArticleAnswer(raw){
  const q=norm(raw).replace(/[¿?¡!.,]/g,' ').replace(/\s+/g,' ').trim();
- const m=q.match(/^(?:oye aguacatin\s+)?(?:dime\s+)?(?:quien(?:es)?|que clientes|cuales clientes|cuales son los clientes que|los clientes que)\s+(?:lleva[n]?|pide[n]?|tiene[n]?|compra[n]?|han pedido|han comprado|llevan pedido)\s+(.+)$/);
+ const m=q.match(/^(?:oye aguacatin\s+)?(?:dime\s+)?(?:quien(?:es)?|que clientes|cuales clientes|cuales son los clientes que|los clientes que)\s+(?:lleva[n]?|pide[n]?|tiene[n]?|compra[n]?|ha pedido|han pedido|han comprado|llevan pedido)\s+(.+)$/);
  if(!m)return null;
  const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
  const date=/\bayer\b/.test(q)?[yesterday.getFullYear(),String(yesterday.getMonth()+1).padStart(2,'0'),String(yesterday.getDate()).padStart(2,'0')].join('-'):today();
@@ -185,7 +185,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const money=n=>n.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 function box(){let el=document.getElementById('sgDemoBox');if(!el){el=document.createElement('div');el.id='sgDemoBox';const controls=document.getElementById('aguControls');if(!controls)return null;controls.appendChild(el)}return el}
 function show(html){document.getElementById('aguFloat').classList.add('aguExpanded');document.getElementById('aguControls').hidden=false;const el=box();if(el)el.innerHTML='<b>🧪 MODO PRUEBAS · SIN GUARDAR DATOS</b><div style="margin-top:8px">'+html+'</div>'}
-window.sgDemoPedido=function(raw){const t=norm(raw).replace(/\s+/g,' ').trim();if(!/\b(pedido|prepara|apunta|anota|pedir)\b/.test(t))return false;
+window.sgDemoPedido=function(raw){const t=norm(raw).replace(/\s+/g,' ').trim();if(!/^(?:oye aguacatin[, ]+)?(?:prepara|apunta|anota|registra|crea|haz|nuevo pedido|hacer pedido)\b/.test(t))return false;
 const cm=t.match(/\b(?:para|cliente)\s+(.+?)(?=\s+\d+(?:[.,]\d+)?\s*(?:cajas?|kg|kilos?)|[,;.]|$)/);
 const client=cm?cm[1].replace(/\b(?:de|con)\s*$/,'').trim():'';
 const lines=[];const re=/(\d+(?:[.,]\d+)?)\s*(cajas?|kg|kilos?)\s+(?:de\s+)?([a-zñáéíóúü][a-zñáéíóúü\s-]*?)\s+(?:a|al|por)\s*(\d+(?:[.,]\d+)?)\s*(?:€|euros?)?\s*(?:por|\/)\s*(caja|kg|kilo)\b/g;
@@ -363,19 +363,75 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
 })();
 </script>
 <script id="sg-aguacatin-ia">
-(()=>{const local=askAgu;let busy=false;
-askAgu=async function(){const input=$('aguQuestion');const mensaje=input.value.trim();if(!mensaje||busy)return;
-if(!user||role!=='owner'||user.is_anonymous)return local();
-if(mensaje.length>8000){aguSay('La consulta es demasiado larga.');return;}
-const article=sgArticleAnswer(mensaje);if(article!==null){aguSay(article);return;}
-if(/\b(clientes|pedidos|cajas)\b/.test(norm(mensaje))&&/cu[aá]nt[oa]s/i.test(mensaje))return local();
-busy=true;try{ $('aguLine').textContent='Consultando inteligencia artificial…';
-const {data,error}=await api.auth.getSession();if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
-const result=await api.functions.invoke('Sg-aguacatin',{body:{mensaje},headers:{Authorization:'Bearer '+data.session.access_token}});
-if(result.error){let detail;try{detail=await result.error.context.json()}catch{}throw Error(detail?.error||result.error.message);}
-if(!result.data?.ok||typeof result.data.respuesta!=='string')throw Error(result.data?.error||'Respuesta no válida.');
-aguSay(result.data.respuesta);
-}catch(e){$('aguLine').textContent='IA: '+(e.message||'No disponible');}finally{busy=false;}};
+(()=>{
+  const previousAsk = askAgu;
+  let busy = false;
+  const el = id => document.getElementById(id);
+  function speechText(t){return String(t||'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/\*\*|__|[`*_#~]/g,'').replace(/https?:\/\/\S+/g,'').trim();}
+  function display(t, speak=false){
+    const message=String(t||'').trim();
+    if(el('aguLine'))el('aguLine').textContent=message;
+    if(el('aguBubble'))el('aguBubble').textContent=message;
+    if(el('aguFloat'))el('aguFloat').classList.add('aguExpanded');
+    if(el('aguControls'))el('aguControls').hidden=false;
+    if(speak&&message&&'speechSynthesis' in window){
+      speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(speechText(message));
+      utterance.lang='es-ES';utterance.pitch=1.65;utterance.rate=1.06;
+      speechSynthesis.speak(utterance);
+    }
+  }
+  function isOrderCommand(t){
+    const q=norm(t).trim();
+    if(/^(?:quien|quienes|que|cual|cuales|cuanto|cuantos|cuanta|cuantas|dime|consulta|busca|muestra|lista|hay|tenemos|me puedes decir|puedes decir|quiero saber)\b/.test(q))return false;
+    if(/[?¿]/.test(t))return false;
+    return /^(?:oye aguacatin[, ]*)?(?:crea|crear|registra|registrar|prepara|preparar|anota|anotar|apunta|apuntar|haz|hacer|añade|agrega|modifica|cambia)\b/.test(q);
+  }
+  async function query(mensaje){
+    if(busy)return;
+    if(!user||role!=='owner'||user.is_anonymous){
+      el('aguQuestion').value=mensaje;
+      previousAsk();
+      display(el('aguLine')?.textContent||'Consulta no disponible.',false);
+      return;
+    }
+    busy=true;display('Consultando datos de SG Corredores…');
+    try{
+      const {data,error}=await api.auth.getSession();
+      if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
+      const response=await api.functions.invoke('Sg-aguacatin',{
+        body:{mensaje},headers:{Authorization:'Bearer '+data.session.access_token}
+      });
+      if(response.error){
+        let detail=null;
+        try{detail=await response.error.context?.json()}catch(_){}
+        throw Error(detail?.error||response.error.message||'Error de conexión');
+      }
+      if(!response.data?.ok||typeof response.data.respuesta!=='string')
+        throw Error(response.data?.error||'La respuesta del servidor no es válida.');
+      display(response.data.respuesta,true);
+    }catch(e){
+      display('No he podido consultar los datos: '+(e?.message||'Error desconocido')+'.',false);
+    }finally{busy=false;}
+  }
+  askAgu=async function(){
+    const mensaje=el('aguQuestion')?.value.trim();
+    if(!mensaje)return;
+    if(mensaje.length>8000){display('La pregunta es demasiado larga.');return;}
+    await query(mensaje);
+  };
+  window.aguSend=async function(){
+    const input=el('aguFloatInput');
+    const mensaje=input?.value.trim();
+    if(!mensaje||busy)return;
+    input.value='';
+    if(isOrderCommand(mensaje)&&typeof window.sgDemoPedido==='function'&&window.sgDemoPedido(mensaje)){
+      display('He preparado una vista previa. No he guardado ningún pedido.');return;
+    }
+    if(el('aguQuestion'))el('aguQuestion').value=mensaje;
+    await query(mensaje);
+  };
+  // El reconocimiento de voz ya llama a aguSend automáticamente en onresult.
 })();
 </script>
 </body></html>
