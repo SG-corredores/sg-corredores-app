@@ -325,4 +325,25 @@ test.onclick=async()=>{test.disabled=true;status.textContent='Enviando prueba…
 const previousLogout=logout;logout=async function(){try{await disable()}catch(e){status.textContent='No se pudo desactivar el dispositivo: '+e.message;return;}return previousLogout.apply(this,arguments)};
 })();
 
-</script></body></html>
+</script><script id="sg-gmail-connect">
+(function(){
+ const originalSettings=settings;
+ settings=function(){return originalSettings.apply(this,arguments)+(role==='owner'&&!user?.is_anonymous?`<div class="card"><h2>Gmail de empresa</h2><p>Autoriza la lectura del correo empresarial. No permite enviar ni borrar mensajes.</p><button type="button" class="primary" onclick="sgConnectGmail(this)">Conectar Gmail</button><p id="sgGmailStatus" role="status"></p></div>`:'');};
+ window.sgConnectGmail=async function(button){
+ const status=document.getElementById('sgGmailStatus');
+ button.disabled=true;
+ try{
+ if(role!=='owner'||user?.is_anonymous)throw Error('Solo el administrador puede conectar Gmail.');
+ status.textContent='Preparando autorización…';
+ const {data,error}=await api.auth.getSession();
+ if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
+ const result=await api.functions.invoke('hyper-worker',{body:{},headers:{Authorization:'Bearer '+data.session.access_token}});
+ if(result.error)throw Error('No se pudo iniciar la conexión con Gmail: '+result.error.message);
+ const url=new URL(result.data?.url);
+ if(url.origin!=='https://accounts.google.com'||!url.pathname.startsWith('/o/oauth2/'))throw Error('Dirección de autorización no válida.');
+ location.assign(url.href);
+ }catch(e){status.textContent=e.message;button.disabled=false;}
+ };
+})();
+</script>
+</body></html>
