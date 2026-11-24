@@ -346,4 +346,20 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
  };
 })();
 </script>
+<script id="sg-aguacatin-ia">
+(()=>{const local=askAgu;let busy=false;
+askAgu=async function(){const input=$('aguQuestion');const mensaje=input.value.trim();if(!mensaje||busy)return;
+if(!user||role!=='owner'||user.is_anonymous)return local();
+if(mensaje.length>8000){aguSay('La consulta es demasiado larga.');return;}
+const article=sgArticleAnswer(mensaje);if(article!==null){aguSay(article);return;}
+if(/\b(clientes|pedidos|cajas)\b/.test(norm(mensaje))&&/cu[aá]nt[oa]s/i.test(mensaje))return local();
+busy=true;try{ $('aguLine').textContent='Consultando inteligencia artificial…';
+const {data,error}=await api.auth.getSession();if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
+const result=await api.functions.invoke('Sg-aguacatin',{body:{mensaje},headers:{Authorization:'Bearer '+data.session.access_token}});
+if(result.error){let detail;try{detail=await result.error.context.json()}catch{}throw Error(detail?.error||result.error.message);}
+if(!result.data?.ok||typeof result.data.respuesta!=='string')throw Error(result.data?.error||'Respuesta no válida.');
+aguSay(result.data.respuesta);
+}catch(e){$('aguLine').textContent='IA: '+(e.message||'No disponible');}finally{busy=false;}};
+})();
+</script>
 </body></html>
