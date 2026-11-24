@@ -636,7 +636,8 @@ async function answer(message){
   lastClient=client||'';lastDate=date;lastResponse=`Carga del ${date}. ${lines.join('. ')}. Total: ${selected.length} palés${client?' de '+client:''}.`;return lastResponse;
  }catch(e){return 'No puedo confirmar los datos de carga: '+(e.message||String(e))}finally{busy=false}
 }
-const oldSend=window.aguSend;window.aguSend=async function(){const el=document.getElementById('aguFloatInput'),msg=el?.value?.trim();if(!msg)return oldSend?.();const a=await answer(msg);if(a===null)return oldSend?.();el.value='';say(a)};
+const oldSend=window.aguSend;window.sgCancelPendingOrder=()=>{pending=null;};
+window.aguSend=async function(){const el=document.getElementById('aguFloatInput'),msg=el?.value?.trim();if(!msg)return oldSend?.();const a=await answer(msg);if(a===null)return oldSend?.();el.value='';say(a)};
 const oldAsk=window.askAgu;window.askAgu=async function(){const msg=document.getElementById('aguQuestion')?.value?.trim();if(!msg)return oldAsk?.();const a=await answer(msg);if(a===null)return oldAsk?.();say(a)};
 window.sgAgu2={version:'2.0',logisticsQuery:answer};
 })();
@@ -701,17 +702,23 @@ if(typeof oldListen==='function')window.aguListen=function(){halt();last='';retu
 <script id="sg-agu-operativo">
 (()=>{
 const oldSend=window.aguSend,oldAsk=window.askAgu;
-let busy=false;
+let busy=false,pending=null;
 const n=s=>norm(s).replace(/\s+/g,' ');
 const say=s=>{ $('aguBubble').textContent=s; $('aguLine').textContent=s; $('aguFloat').classList.add('aguExpanded'); $('aguControls').hidden=false; };
 const number=s=>Number(s.replace(',','.'));
 async function handle(raw){
  const q=n(raw).replace(/^(?:oye\s+)?aguacatin[, ]*/,'');
+ if(pending && (Date.now()>pending.expires || pending.uid!==user?.id || pending.workspace!==workspace))pending=null;
+ if(pending && /^(si|si guardalo|guardalo|confirma|confirmo|adelante|correcto|vale|de acuerdo)[.! ]*$/.test(q)){
+ if(busy)return true;busy=true;const draft=pending;pending=null;
+ try{if(!user||role!=='owner'||user.is_anonymous)throw Error('Sin permiso para guardar.');await save('orders',draft.data);go('pedidos');say('Pedido guardado y sincronizado: '+draft.label+'.');}catch(e){say('No he podido confirmar el guardado. Revisa los pedidos antes de repetir la orden. '+(e.message||''));}finally{busy=false;}return true;
+ }
+ if(pending && /^(no|cancela|cancelar|no lo guardes)[.! ]*$/.test(q)){pending=null;say('Pedido cancelado. No he guardado nada.');return true;}
  const create=/\b(crea|prepara|anota|anotame|apunta|apuntame|haz|registra|nuevo|ponle|ponme|pon|anade|agrega|mete|pide|pedir)\b/.test(q)&&/\b(pedidos?|cajas?|palets?|pales?|pallets?)\b/.test(q)&&!/\b(carga|cargado|cargadas)\b/.test(q)&&!/^\s*(cuantos?|cuantas?|que|cual|dime)\b/.test(q);
  const change=/^(cambia|modifica|actualiza|pon)\b/.test(q)&&/\bprecio\b/.test(q);
  const load=/^(registra|anota|apunta|carga|confirma)\b/.test(q)&&/\b(carga|cargadas|cargado|carga parcial|cajas|kilos)\b/.test(q)&&!create;
  if(!create&&!change&&!load)return false;
- if(busy)return true;busy=true;
+ if(busy)return true;busy=true;pending=null;
  try{
  if(!user||role!=='owner'||user.is_anonymous)throw Error('Esta función requiere acceso de administrador.');
  if(syncing)throw Error('Espera a que termine la sincronización y repite la orden.');
@@ -730,7 +737,11 @@ async function handle(raw){
  let product=q.slice(amount.index+amount[0].length).replace(/^\s*de\s+/,'').split(/\s+(?:para|a|al|por|precio|cliente)\s+/)[0].trim();
  if(!product||qty<=0)throw Error('Indica producto y cantidad válida.');
  
- go('pedidos');set('oClient',client.id);set('oDate',date);set('oProduct',product);set('oBoxes',qty);set('oUnit',amount[2].startsWith('caja')?'cajas':'pales');set('oPrice',p===null?'':p.toFixed(2));set('oPriceUnit',unit||'kg');
+ if(p!==null&&(!Number.isFinite(p)||p<0||Math.abs(p*100-Math.round(p*100))>1e-8))throw Error('Precio no válido.');
+ const quantityUnit=amount[2].startsWith('caja')?'cajas':'pales';
+ const label=`${qty} ${quantityUnit==='cajas'?'cajas':'palés'} de ${product} para ${d(client).name}`;
+ pending={uid:user.id,workspace,expires:Date.now()+60000,label,data:{date,clientId:client.id,product,variety:'',boxes:qty,quantityUnit,priceCents:p===null?null:Math.round(p*100),price:p,priceUnit:unit||'kg',status:'Pendiente',notes:''}};
+ say(label+'. ¿Lo guardo?');return true;
  }else{
  if(!client)throw Error('Indica el cliente exacto y el producto del pedido.');
  const candidates=records.orders.filter(r=>d(r).clientId===client.id&&d(r).date===date&&!['Cancelado','Completado'].includes(d(r).status)&&(' '+q+' ').includes(' '+n(d(r).product)+' '));
@@ -742,6 +753,7 @@ async function handle(raw){
  say(create?`${qty} ${amount[2].startsWith('caja')?'cajas':'palés'} de ${$('oProduct').value} para ${d(client).name}. Pedido preparado; revisa y pulsa Guardar.`:'Borrador preparado. Revisa y pulsa Guardar.');
  }catch(e){say(e.message||String(e));}finally{busy=false;}return true;
 }
+window.sgCancelPendingOrder=()=>{pending=null;};
 window.aguSend=async function(){const el=$('aguFloatInput'),msg=el?.value.trim();if(msg&&await handle(msg)){el.value='';return;}return oldSend?.();};
 window.askAgu=async function(){const msg=$('aguQuestion')?.value.trim();if(msg&&await handle(msg))return;return oldAsk?.();};
 })();
@@ -754,7 +766,7 @@ let active=false,rec=null,busy=false,timer=null,idleTimer=null,failures=0;
 const close=window.closeAgu;
 const button=document.createElement('button');button.type='button';button.textContent='Detener conversación';button.hidden=true;document.getElementById('aguControls').appendChild(button);
 function pause(){clearTimeout(timer);clearTimeout(idleTimer);idleTimer=null;if(rec){const r=rec;rec=null;try{r.abort()}catch{}}floating.classList.remove('aguListening');}
-function stop(){active=false;pause();button.hidden=true;}
+function stop(){active=false;pause();button.hidden=true;window.sgCancelPendingOrder?.();}
 function resume(){clearTimeout(timer);if(active&&!busy&&!rec&&!document.hidden)timer=setTimeout(listen,350);}
 function listen(){if(!active||busy||rec||document.hidden)return;if(idleTimer===null)idleTimer=setTimeout(stop,10000);if(!SR){stop();bubble.textContent='Micrófono no compatible con este navegador.';return;}const r=new SR();rec=r;r.lang='es-ES';r.continuous=false;r.interimResults=false;
 r.onspeechstart=()=>{if(rec===r){clearTimeout(idleTimer);idleTimer=null;}};r.onspeechend=()=>{if(rec===r&&active&&idleTimer===null)idleTimer=setTimeout(stop,10000);};r.onresult=async e=>{if(rec!==r||!active)return;const text=e.results[0][0].transcript.trim();failures=0;busy=true;pause();if(/^(adios|hasta luego|deten la conversacion|deja de escuchar)[.! ]*$/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g,''))){busy=false;stop();return;}document.getElementById('aguFloatInput').value=text;try{await window.aguSend()}finally{busy=false;const muted=localStorage.getItem('sg_agu_voice_enabled')==='false';if(muted)resume();else if(!timer){} }};
