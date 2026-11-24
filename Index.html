@@ -450,7 +450,7 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
       const {data,error}=await api.auth.getSession();
       if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
       const response=await api.functions.invoke('Sg-aguacatin',{
-        body:{mensaje},headers:{Authorization:'Bearer '+data.session.access_token}
+        body:{mensaje,historial:window.sgAguHistory?.get()||[]},headers:{Authorization:'Bearer '+data.session.access_token}
       });
       if(response.error){
         let detail=null;
@@ -459,6 +459,7 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
       }
       if(!response.data?.ok||typeof response.data.respuesta!=='string')
         throw Error(response.data?.error||'La respuesta del servidor no es válida.');
+      window.sgAguHistory?.add(mensaje,response.data.respuesta);
       display(response.data.respuesta,true);
     }catch(e){
       display('No he podido consultar los datos: '+(e?.message||'Error desconocido')+'.',false);
@@ -744,4 +745,4 @@ window.aguSend=async function(){const el=$('aguFloatInput'),msg=el?.value.trim()
 window.askAgu=async function(){const msg=$('aguQuestion')?.value.trim();if(msg&&await handle(msg))return;return oldAsk?.();};
 })();
 </script>
-</body></html>
+<script>window.sgAguHistory=(()=>{let uid=null,history=[];function check(){const id=typeof user!=='undefined'&&user?.id;if(id!==uid){uid=id;history=[];}return id;}return {get(){return check()?history.slice(-8):[]},add(q,a){if(check()){history.push({role:'user',content:q.slice(0,1800)},{role:'assistant',content:a.slice(0,1800)});history=history.slice(-8);}},clear(){history=[];}}})();</script></body></html>
