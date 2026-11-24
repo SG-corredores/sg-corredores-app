@@ -745,4 +745,4 @@ window.aguSend=async function(){const el=$('aguFloatInput'),msg=el?.value.trim()
 window.askAgu=async function(){const msg=$('aguQuestion')?.value.trim();if(msg&&await handle(msg))return;return oldAsk?.();};
 })();
 </script>
-<script>window.sgAguHistory=(()=>{let uid=null,history=[];function check(){const id=typeof user!=='undefined'&&user?.id;if(id!==uid){uid=id;history=[];}return id;}return {get(){return check()?history.slice(-8):[]},add(q,a){if(check()){history.push({role:'user',content:q.slice(0,1800)},{role:'assistant',content:a.slice(0,1800)});history=history.slice(-8);}},clear(){history=[];}}})();</script></body></html>
+<script>window.sgAguHistory=(()=>{let uid=null,history=[];function check(){const id=typeof user!=='undefined'&&user?.id;if(id!==uid){uid=id;history=[];}return id;}return {get(){return check()?history.slice(-20):[]},add(q,a){if(check()){history.push({role:'user',content:q.slice(0,3500)},{role:'assistant',content:a.slice(0,3500)});history=history.slice(-20);}},clear(){history=[];}}})();</script></body></html>
