@@ -706,7 +706,7 @@ const say=s=>{ $('aguBubble').textContent=s; $('aguLine').textContent=s; $('aguF
 const number=s=>Number(s.replace(',','.'));
 async function handle(raw){
  const q=n(raw).replace(/^(?:oye\s+)?aguacatin[, ]*/,'');
- const create=/^(crea|prepara|anota|apunta|haz|registra|nuevo)\b/.test(q)&&/\bpedido\b/.test(q);
+ const create=/^(crea|prepara|anota|apunta|haz|registra|nuevo|ponle|pon|anade|agrega)\b/.test(q)&&/\b(pedido|cajas?|palets?|pales?)\b/.test(q)&&!/\b(carga|cargado|cargadas|precio)\b/.test(q);
  const change=/^(cambia|modifica|actualiza|pon)\b/.test(q)&&/\bprecio\b/.test(q);
  const load=/^(registra|anota|apunta|carga|confirma)\b/.test(q)&&/\b(carga|cargadas|cargado|carga parcial|cajas|kilos)\b/.test(q)&&!create;
  if(!create&&!change&&!load)return false;
@@ -716,29 +716,29 @@ async function handle(raw){
  if(syncing)throw Error('Espera a que termine la sincronización y repite la orden.');
  await sync(true);
  if(!$('status').textContent.startsWith('●'))throw Error('No se han podido actualizar los datos.');
- const matches=records.clients.filter(r=>(' '+q+' ').includes(' '+n(d(r).name)+' ')||q.endsWith(' '+n(d(r).name)));
+ const tokens=x=>n(x).split(/[^a-z0-9]+/).filter(Boolean); const qt=tokens(q); const full=records.clients.filter(r=>(' '+qt.join(' ')+' ').includes(' '+tokens(d(r).name).join(' ')+' ')); const matches=full.length?full:records.clients.filter(r=>tokens(d(r).name).some(w=>w.length>=3&&qt.includes(w)&&!['para','del','los','las','san','una','dos','tres','caja','cajas','palet','pales','patatas','cebollas'].includes(w))); 
  const client=matches.length===1?matches[0]:null;
- const amount=q.match(/\b(\d+(?:[.,]\d+)?)\s*(cajas?|pales?|palets?)\b/);
+ const nums={un:1,una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10}; const amount=q.match(/\b(\d+(?:[.,]\d+)?|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s*(cajas?|pales?|palets?)\b/); const qty=amount?(nums[amount[1]]??number(amount[1])):0;
  const pm=q.match(/\b(?:a|al|precio(?:\s+de)?|por)\s+(\d+(?:[.,]\d{1,2})?)(?![\d.,])\s*(?:euros?|€)?/);
  const p=pm?number(pm[1]):null;
  const unit=/por caja|\/caja/.test(q)?'caja':/por kilo|por kg|\/kg/.test(q)?'kg':null;
  const date=q.match(/\b20\d\d-\d\d-\d\d\b/)?.[0]||today();
  const set=(id,v)=>{if($(id))$(id).value=String(v??'')};
  if(create){
- if(!client||!amount)throw Error('Indica el nombre exacto del cliente y la cantidad en cajas o palés.');
+ if(matches.length>1)throw Error('¿A cuál te refieres: '+matches.map(r=>d(r).name).join(' o ')+'? Repite la orden con el cliente elegido.'); if(!client||!amount)throw Error('Dime el cliente y la cantidad en cajas o palés.'); if(/\b(y lo mismo|tambien|y para|y a|ademas)\b/.test(q))throw Error('Vamos a preparar un pedido cada vez para no mezclar clientes o productos.');
  let product=q.slice(amount.index+amount[0].length).replace(/^\s*de\s+/,'').split(/\s+(?:para|a|al|por|precio|cliente)\s+/)[0].trim();
- if(!product||number(amount[1])<=0)throw Error('Indica producto y cantidad válida.');
- if(!confirm(`Preparar pedido de ${d(client).name}: ${amount[0]} de ${product}${p===null?'':', precio '+p.toFixed(2)+' €'}?`))return true;
- go('pedidos');set('oClient',client.id);set('oDate',date);set('oProduct',product);set('oBoxes',amount[1]);set('oUnit',amount[2].startsWith('caja')?'cajas':'pales');set('oPrice',p===null?'':p.toFixed(2));set('oPriceUnit',unit||'kg');
+ if(!product||qty<=0)throw Error('Indica producto y cantidad válida.');
+ 
+ go('pedidos');set('oClient',client.id);set('oDate',date);set('oProduct',product);set('oBoxes',qty);set('oUnit',amount[2].startsWith('caja')?'cajas':'pales');set('oPrice',p===null?'':p.toFixed(2));set('oPriceUnit',unit||'kg');
  }else{
  if(!client)throw Error('Indica el cliente exacto y el producto del pedido.');
  const candidates=records.orders.filter(r=>d(r).clientId===client.id&&d(r).date===date&&!['Cancelado','Completado'].includes(d(r).status)&&(' '+q+' ').includes(' '+n(d(r).product)+' '));
  if(candidates.length!==1)throw Error('No hay un pedido único. Indica cliente, producto exacto y fecha (AAAA-MM-DD).');
  const r=candidates[0],x=d(r);
  if(change){if(p===null)throw Error('Indica el nuevo precio, por ejemplo a 0,65 euros.');if(!confirm(`Revisar precio de ${x.product} para ${d(client).name}: ${p.toFixed(2)} €/${unit||x.priceUnit||'kg'}?`))return true;go('pedidos');edit('orders',r.id);set('oPrice',p.toFixed(2));if(unit)set('oPriceUnit',unit);}
- else{const kg=q.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|kilos?)\b/);if(!amount||!amount[2].startsWith('caja')||number(amount[1])<=0||!kg||number(kg[1])<=0)throw Error('Indica cajas y kilos reales de la carga.');if(!confirm(`Revisar carga de ${amount[0]} y ${kg[0]} de ${x.product} para ${d(client).name}?`))return true;go('compras');set('pClient',client.id);sgRefreshOrderChoices();set('pOrder',r.id);set('pDate',date);set('pProduct',x.product);set('pVariety',x.variety);set('pBoxes',amount[1]);set('pMode','real');set('pKg',kg[1]);set('pStatus','Cargado');set('pPrice',p===null?'':p.toFixed(2));set('pPriceUnit',unit||'kg');toggleWeight();}
+ else{const kg=q.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|kilos?)\b/);if(!amount||!amount[2].startsWith('caja')||qty<=0||!kg||number(kg[1])<=0)throw Error('Indica cajas y kilos reales de la carga.');if(!confirm(`Revisar carga de ${amount[0]} y ${kg[0]} de ${x.product} para ${d(client).name}?`))return true;go('compras');set('pClient',client.id);sgRefreshOrderChoices();set('pOrder',r.id);set('pDate',date);set('pProduct',x.product);set('pVariety',x.variety);set('pBoxes',qty);set('pMode','real');set('pKg',kg[1]);set('pStatus','Cargado');set('pPrice',p===null?'':p.toFixed(2));set('pPriceUnit',unit||'kg');toggleWeight();}
  }
- say('Borrador preparado. Revisa todos los datos y pulsa Guardar en el formulario. Todavía no he guardado nada.');
+ say(create?`${qty} ${amount[2].startsWith('caja')?'cajas':'palés'} de ${$('oProduct').value} para ${d(client).name}. Pedido preparado; revisa y pulsa Guardar.`:'Borrador preparado. Revisa y pulsa Guardar.');
  }catch(e){say(e.message||String(e));}finally{busy=false;}return true;
 }
 window.aguSend=async function(){const el=$('aguFloatInput'),msg=el?.value.trim();if(msg&&await handle(msg)){el.value='';return;}return oldSend?.();};
