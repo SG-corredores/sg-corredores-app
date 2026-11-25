@@ -1,6 +1,11 @@
 {
-  "version":"10.0.0-rc.1",
+  "version":"10.0.0-rc.2",
   "news":[
+    "Aguacatín más grande. Mantén pulsado dos segundos para cerrar. Opciones de voz en Ajustes.",
+    "Botón flotante del walkie: mantén pulsado para hablar.",
+    "Invitaciones por WhatsApp y vista de administrador de la Zona Clientes.",
+    "PDF original y observaciones en la revisión de facturas.",
+    "Letras más legibles en el móvil, con las tres columnas de pedidos visibles.",
     "Campana de avisos, historial y preferencias individuales.",
     "Zona Clientes con acceso por empresa y pedidos revisables.",
     "Palés completos y medios palés, con formato de fracción.",

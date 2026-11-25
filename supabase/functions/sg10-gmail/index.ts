@@ -35,9 +35,52 @@ Deno.serve(async request => {
       if (!response.ok) throw Error("Gmail HTTP "+response.status);
       return response.json();
     }
+    async function readPdf(messageId: string, part: Part) {
+      if ((part.body?.size ?? 0)>largeLimit) return null;
+      const attachment=part.body?.attachmentId
+        ? await gmail("/messages/"+encodeURIComponent(messageId)+"/attachments/"+encodeURIComponent(part.body.attachmentId))
+        : part.body;
+      if(!attachment?.data)return null;
+      const encoded=attachment.data.replace(/-/g,"+").replace(/_/g,"/");
+      const base64=encoded.padEnd(Math.ceil(encoded.length/4)*4,"=");
+      const decoded=atob(base64);
+      const bytes=new Uint8Array(decoded.length);
+      for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);
+      if(bytes.length>largeLimit || !new TextDecoder().decode(bytes.slice(0,1024)).includes("%PDF-"))return null;
+      return {bytes,base64,hash:hex(await crypto.subtle.digest("SHA-256",bytes))};
+    }
+    async function saveOriginal(hash: string, bytes: Uint8Array) {
+      const {error}=await api.storage.from("sg10-facturas-originales").upload(workspace+"/"+hash+".pdf",bytes,{
+        contentType:"application/pdf",cacheControl:"0",upsert:true,
+      });
+      if(error)throw error;
+    }
     const profile = await gmail("/profile");
     if (String(profile.emailAddress).toLowerCase() !== inbox.toLowerCase()) return Response.json({error:"Buzón inesperado."},{status:403});
     if (checkOnly) return Response.json({ready:true});
+    const { originalsOnly }=await request.json().catch(()=>({}));
+    if (originalsOnly === true){
+      const {data,error}=await api.rpc("sg10_missing_invoice_pdfs",{p_workspace:workspace,p_limit:4});
+      if(error)throw error;
+      let restored=0, missing=0;
+      const targets=new Map<string,Set<string>>();
+      for(const row of data){
+        const hashes=targets.get(row.gmail_id)??new Set<string>();
+        hashes.add(row.pdf_hash);targets.set(row.gmail_id,hashes);
+      }
+      for(const [messageId,hashes] of targets){
+        try{
+          const message=await gmail("/messages/"+encodeURIComponent(messageId)+"?format=full");
+          for(const part of parts(message.payload??{})){
+            if(!/\.pdf$/i.test(part.filename??"")&&part.mimeType!=="application/pdf")continue;
+            const pdf=await readPdf(messageId,part);
+            if(pdf&&hashes.has(pdf.hash)){await saveOriginal(pdf.hash,pdf.bytes);hashes.delete(pdf.hash);restored++;}
+          }
+        }catch(error){console.error("sg10-gmail originals",error instanceof Error?error.message:"storage");}
+        missing+=hashes.size;
+      }
+      return Response.json({restored,missing});
+    }
     const [cursor, clients] = await Promise.all([
       api.from("sg10_gmail_cursor").select("page_token").eq("workspace_id",workspace).maybeSingle(),
       api.from("sg_clients").select("id,data").eq("workspace_id",workspace).limit(500),
@@ -72,18 +115,12 @@ Deno.serve(async request => {
             if (event.error) throw event.error;
             continue;
           }
-          const attachment=part.body?.attachmentId
-            ? await gmail("/messages/"+encodeURIComponent(entry.id)+"/attachments/"+encodeURIComponent(part.body.attachmentId))
-            : part.body;
-          if (!attachment?.data) continue;
-          const base64=attachment.data.replace(/-/g,"+").replace(/_/g,"/");
-          const padded=base64.padEnd(Math.ceil(base64.length/4)*4,"=");
-          const bytes=Uint8Array.from(atob(padded),x=>x.charCodeAt(0));
-          if (bytes.length>largeLimit) continue;
-          const hash=hex(await crypto.subtle.digest("SHA-256",bytes));
+          const pdf=await readPdf(entry.id,part);
+          if(!pdf)continue;
+          const {hash,bytes,base64:padded}=pdf;
           const exists=await api.from("sg_invoices").select("id").eq("workspace_id",workspace).eq("sg10_pdf_hash",hash).maybeSingle();
           if (exists.error) throw exists.error;
-          if (exists.data) continue;
+          if (exists.data){await saveOriginal(hash,bytes);continue;}
           const ai=await fetch("https://api.openai.com/v1/responses",{method:"POST",signal:AbortSignal.timeout(30_000),
             headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
             body:JSON.stringify({model:Deno.env.get("SG10_INVOICE_MODEL")||"gpt-4.1-mini",store:false,max_output_tokens:12000,
@@ -99,6 +136,7 @@ Deno.serve(async request => {
           const candidates=clients.data.filter(row=>(tax&&normalize(row.data.cif??row.data.nif)===tax)||(name&&normalize(row.data.name)===name));
           const supplier=normalize(doc.cif_proveedor), number=normalize(doc.numero);
           const key=supplier&&number&&/^20\d{2}-\d{2}-\d{2}$/.test(doc.fecha) ? supplier+"|"+doc.fecha.slice(0,4)+"|"+number : null;
+          await saveOriginal(hash,bytes);
           const response=await api.from("sg_invoices").insert({workspace_id:workspace,invoice_number:typeof doc.numero==="string"?doc.numero.slice(0,100):null,
             customer_name:typeof doc.cliente==="string"?doc.cliente.slice(0,150):"",created_by:owner,
             invoice_data:{...doc,client_id:candidates.length===1?candidates[0].id:null,archivo:String(part.filename??"").slice(0,180),

@@ -1,4 +1,4 @@
-import { attachInbox, detachPush, esc as html, formatPallets, invoke, matchCompany, normalized, readPallets, readRelease, validNumber, version } from "./common.js";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, matchCompany, normalized, readPallets, readRelease, validNumber, version } from "./common.js";
 import { installWalkie } from "./walkie.js";
 import { installOperations } from "./operations.js";
 
@@ -42,7 +42,8 @@ function openMore() {
     button.textContent=label;
     button.onclick=()=>{
       dialog.close();
-      if(target==="portal") location.assign("./portal.html");
+      if(target==="portal"&&role==="owner"&&!user?.is_anonymous) window.sg10Ops("clients");
+      else if(target==="portal") location.assign("./portal.html");
       else if(target==="walkie") walkie.open();
       else go(target);
     };
@@ -228,6 +229,7 @@ function connectScope() {
   liveApi = null;
   history = [];
   orderDraft = null;
+  walkie.showShortcut(Boolean(key));
   if (!key) { walkie.close(); return; }
   inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice});
   liveApi = api;
@@ -414,9 +416,22 @@ window.sgExtra = function (target) {
   return originalExtra(target);
 };
 
+window.sg10InviteStaffWhatsApp = async (button) => {
+  if (role !== "owner" || user?.is_anonymous || !button.form?.reportValidity()) return;
+  const result = $("sgInviteStatus");
+  button.disabled = true;
+  try {
+    await prepareWhatsAppInvite(api,workspace,val("sgInviteEmail"),null,result);
+  } catch (error) {
+    result.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+
 let availableVersion;
 const originalSettings = settings;
-settings = () => originalSettings() + '<div class="card"><h2>Actualizaciones</h2><p>Instalada: <strong>' + version
+settings = () => originalSettings() + '<div class="card"><h2>Voz de Aguacatín</h2><div id="sgAguVoiceSettings"></div></div>' + '<div class="card"><h2>Actualizaciones</h2><p>Instalada: <strong>' + version
   + '</strong></p><button onclick="sg10CheckRelease(this)">Buscar actualizaciones</button><p id="sg10ReleaseStatus" role="status"></p>'
   + '<ul id="sg10ReleaseNews"></ul><button id="sg10Update" onclick="sg10ApplyRelease(this)" hidden>Actualizar aplicación</button></div>'
   + operations.settingsView();

@@ -1,4 +1,4 @@
-import { esc, invoke, normalized, readPallets, validNumber } from "./common.js";
+import { prepareWhatsAppInvite, esc, invoke, normalized, readPallets, validNumber } from "./common.js";
 
 const formatting = new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
 const number = (value) => typeof value === "number" && Number.isFinite(value);
@@ -349,6 +349,114 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     finally{importing=false;button.disabled=false;}
   }
 
+  async function showInvoicePdf(row, section, dialog) {
+    const notice = section.querySelector("[data-original-status]");
+    if (!/^[0-9a-f]{64}$/.test(row.sg10_pdf_hash ?? "")) {
+      notice.textContent = "El PDF original no está disponible para esta factura.";
+      return;
+    }
+    const { api, workspace } = state();
+    const storage = api.storage.from("sg10-facturas-originales");
+    const { data, error } = await storage.createSignedUrl(workspace + "/" + row.sg10_pdf_hash + ".pdf", 300);
+    if (!dialog.open) return;
+    if (error || !data?.signedUrl) {
+      notice.textContent = "El PDF original de esta factura todavía no está disponible.";
+      return;
+    }
+    const source = document.createElement("a");
+    source.href = data.signedUrl;
+    source.target = "_blank";
+    source.rel = "noopener noreferrer";
+    source.textContent = "Abrir PDF original";
+    section.append(source);
+    let documentTask;
+    dialog.addEventListener("close", () => { documentTask?.destroy().catch(() => {}); }, {once:true});
+    try {
+      const cdn = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/";
+      const pdfjs = await import(cdn + "pdf.mjs");
+      if (!dialog.open) return;
+      pdfjs.GlobalWorkerOptions.workerSrc = cdn + "pdf.worker.mjs";
+      documentTask = pdfjs.getDocument({ url:data.signedUrl, isEvalSupported:false, enableXfa:false });
+      const pdf = await documentTask.promise;
+      if (!dialog.open) return;
+      const canvas = section.querySelector("canvas");
+      const controls = section.querySelector("[data-pdf-controls]");
+      const previous = controls.querySelector("[data-prev]");
+      const next = controls.querySelector("[data-next]");
+      let current = 1;
+      async function renderPage(number) {
+        previous.disabled = next.disabled = true;
+        try {
+          const page = await pdf.getPage(number);
+          if (!dialog.open) return;
+          const width = Math.max(200, section.clientWidth - 4);
+          const resolution = Math.min(devicePixelRatio || 1, 2);
+          const viewport = page.getViewport({scale: Math.min(width / page.getViewport({scale:1}).width, 1.6) * resolution});
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          await page.render({canvasContext:canvas.getContext("2d"),viewport}).promise;
+          current = number;
+          notice.textContent = "Página " + number + " de " + pdf.numPages;
+          canvas.hidden = false;
+        } finally {
+          previous.disabled = current <= 1;
+          next.disabled = current >= pdf.numPages;
+        }
+      }
+      const show = (number) => renderPage(number).catch(() => {
+        if(dialog.open) notice.textContent = "No se pudo mostrar la página. Abre el PDF original.";
+      });
+      previous.onclick = () => show(current - 1);
+      next.onclick = () => show(current + 1);
+      controls.hidden = pdf.numPages < 2;
+      await show(1);
+    } catch {
+      if (dialog.open) notice.textContent = "La vista previa no está disponible. Puedes abrir el PDF original.";
+    }
+  }
+
+  function invoiceObservationBox(row, editable) {
+    const box = document.createElement("section");
+    box.className = "sg10-invoice-observations";
+    box.innerHTML = '<h3>Observaciones</h3><textarea aria-label="Observaciones" rows="3" maxlength="2000" placeholder="Añadir observaciones…"></textarea>';
+    const field = box.querySelector("textarea");
+    field.value = row.invoice_data.observaciones ?? "";
+    field.readOnly = !editable;
+    const findings = compareInvoice(row, state().records.purchases, state().records.orders);
+    if (findings.length) {
+      const list = document.createElement("ul");
+      for (const finding of findings) {
+        const item = document.createElement("li");
+        item.textContent = finding;
+        list.append(item);
+      }
+      box.append(list);
+    }
+    if(editable){
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "Guardar observaciones";
+      const feedback = document.createElement("p");
+      feedback.setAttribute("role","status");
+      save.onclick=async()=>{
+        const notes = field.value.trim();
+        save.disabled=true;
+        try {
+          const {api,workspace}=state();
+          const {data,error}=await api.rpc("sg10_save_invoice_observations",{
+            p_workspace:workspace,p_invoice:row.id,p_notes:notes,p_previous:row.invoice_data.observaciones??"",
+          });
+          if(error||!data)throw error??Error("Las observaciones cambiaron. Vuelve a abrir la factura.");
+          row.invoice_data.observaciones=notes;
+          feedback.textContent="Observaciones guardadas.";
+        }catch(error){feedback.textContent=error.message;}
+        finally{save.disabled=false;}
+      };
+      box.append(save,feedback);
+    }
+    return box;
+  }
+
   function reviewInvoice(id) {
     const row=invoiceRows.find(item=>item.id===id);
     if(!row)return;
@@ -378,7 +486,21 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       + (editable?'<label class="sg10-check"><input type="checkbox" name="visible"'+(x.visible_cliente?" checked":"")+'> Publicar para la empresa al aprobar</label>'
         + '<button name="mode" value="save">Guardar correcciones</button> <button name="mode" value="approve">Aprobar</button>'
         + '<p data-review role="status"></p>':'');
-    dialog.querySelector("[data-content]").append(form);
+    const content = dialog.querySelector("[data-content]");
+    const originalPdf = document.createElement("section");
+    originalPdf.className = "sg10-invoice-pdf";
+    originalPdf.innerHTML = '<div role="status" data-original-status>Cargando PDF original…</div>'
+      + '<canvas aria-label="Imagen de la factura original" hidden></canvas>'
+      + '<div data-pdf-controls class="sg10-tools" hidden><button type="button" data-prev>Página anterior</button>'
+      + '<button type="button" data-next>Página siguiente</button></div>';
+    const fields = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = editable ? "Revisar o corregir los datos extraídos" : "Ver los datos extraídos";
+    fields.append(summary,form);
+    content.append(originalPdf,invoiceObservationBox(row,editable),fields);
+    void showInvoicePdf(row,originalPdf,dialog).catch(() => {
+      originalPdf.querySelector("[data-original-status]").textContent = "No se pudo cargar el PDF original.";
+    });
     if(!editable) { for(const field of form.elements)field.disabled=true;return; }
     form.onsubmit=async(event)=>{
       event.preventDefault();
@@ -437,7 +559,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const dialog=openDialog("Accesos de la empresa");
     const content=dialog.querySelector("[data-content]");
     content.innerHTML='<form><label>Empresa <select name="company" required><option value="">Seleccionar</option>'+renderOptions(state().records.clients)
-      + '</select></label><label>Correo individual <input name="email" type="email" required></label><button>Invitar o vincular</button></form>'
+      + '</select></label><label>Correo individual <input name="email" type="email" required></label><button>Invitar por correo</button> '
+      + '<button type="button" data-whatsapp>Invitar por WhatsApp</button> <button type="button" data-preview>Ver como cliente</button></form>'
       + '<p data-status role="status"></p><div data-members></div>';
     const form=content.querySelector("form");
     const message=content.querySelector("[data-status]");
@@ -464,7 +587,27 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         }
       }catch(error){message.textContent=error.message;}
     }
-    form.elements.company.onchange=membersList;
+    form.elements.company.onchange=()=>{
+      message.textContent="";
+      void membersList();
+    };
+    form.querySelector("[data-whatsapp]").onclick=async ({currentTarget:button})=>{
+      if(!form.reportValidity())return;
+      const {api,workspace}=state();
+      const company=form.elements.company.value;
+      button.disabled=true;
+      try{await prepareWhatsAppInvite(api,workspace,form.elements.email.value.trim(),company,message);}
+      catch(error){message.textContent=error.message;}
+      finally{button.disabled=false;}
+    };
+    form.querySelector("[data-preview]").onclick=()=>{
+      if(!form.elements.company.reportValidity())return;
+      const target=new URL("./portal.html",location.href);
+      target.searchParams.set("vista",form.elements.company.value);
+      target.searchParams.set("empresa",state().workspace);
+      window.open(target.href,"_blank","noopener");
+    };
+
     form.onsubmit=async event=>{
       event.preventDefault();
       const email=form.elements.email.value.trim();
