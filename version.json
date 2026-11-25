@@ -1,7 +1,8 @@
 {
-  "version":"10.0.0-rc.3",
+  "version":"10.0.0-rc.4",
   "news":[
-    "Cierre táctil de Aguacatín con pulsación de dos segundos y voz masculina. Opciones de voz en Ajustes.",
+    "Acceso directo a la Zona Clientes para el administrador en modo solo lectura.",
+    "Cierre de Aguacatín con pulsación larga y botón discreto. Vuelve la voz elegida para el personaje.",
     "Botón flotante del walkie: mantén pulsado para hablar.",
     "Invitaciones por WhatsApp y vista de administrador de la Zona Clientes.",
     "PDF original y observaciones en la revisión de facturas.",
