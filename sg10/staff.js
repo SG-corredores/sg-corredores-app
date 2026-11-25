@@ -115,27 +115,28 @@ function decorateDaily() {
     dailyOptions.append(label);
   }
   for (const cell of sheet.querySelectorAll('[data-order-id] [data-field="supplier"]')) {
-    const orderId=cell.closest("[data-order-id]").dataset.orderId;
-    const row=get("orders",orderId);
-    if(d(row).quantityUnit!=="pales")continue;
-    cell.title="Toca para editar. Mantén pulsado para repartir entre puestos.";
-    let timer,x,y;
-    cell.addEventListener("pointerdown",event=>{
-      if(event.button!==0)return;
-      cell.dataset.sg10Held="0";
-      x=event.clientX;y=event.clientY;clearTimeout(timer);
-      timer=setTimeout(()=>{
-        cell.dataset.sg10Held="1";
-        window.sg10Ops("splitPurchase",orderId);
-        setTimeout(()=>{cell.dataset.sg10Held="0";},1400);
-      },620);
-    });
-    cell.addEventListener("pointermove",event=>{
-      if(Math.hypot(event.clientX-x,event.clientY-y)>12)clearTimeout(timer);
-    });
-    for(const name of ["pointercancel","pointerleave","pointerup"])cell.addEventListener(name,()=>clearTimeout(timer));
-    cell.addEventListener("contextmenu",event=>event.preventDefault());
+    bindSplitHold(cell,cell.closest("[data-order-id]").dataset.orderId);
   }
+}
+function bindSplitHold(cell,orderId) {
+  if (d(get("orders",orderId)).quantityUnit !== "pales") return;
+  cell.title = "Toca para editar. Mantén pulsado para repartir entre puestos.";
+  let timer,x,y;
+  cell.addEventListener("pointerdown",event=>{
+    if (event.button!==0) return;
+    cell.dataset.sg10Held="0";
+    x=event.clientX;y=event.clientY;clearTimeout(timer);
+    timer=setTimeout(()=>{
+      cell.dataset.sg10Held="1";
+      window.sg10Ops("splitPurchase",orderId);
+      setTimeout(()=>{cell.dataset.sg10Held="0";},1400);
+    },620);
+  });
+  cell.addEventListener("pointermove",event=>{
+    if (Math.hypot(event.clientX-x,event.clientY-y)>12) clearTimeout(timer);
+  });
+  for (const name of ["pointercancel","pointerleave","pointerup"]) cell.addEventListener(name,()=>clearTimeout(timer));
+  cell.addEventListener("contextmenu",event=>event.preventDefault());
 }
 new MutationObserver(decorateDaily).observe($("content"),{childList:true});
 function simpleOrderForm() {
@@ -248,87 +249,167 @@ document.addEventListener("visibilitychange",() => {
   if (!document.hidden && currentScope()) sync(true);
 });
 
-function changeInline(event, collection, rowId, field, status, stamp) {
-  const fieldInput = event.currentTarget;
-  const card = fieldInput.closest(".item");
-  const inputs = [...card.querySelectorAll(".sg10-inline input")];
-  if (fieldInput.value.trim() === fieldInput.defaultValue.trim()) return;
-  const original = get(collection,rowId);
-  if (!original || original.updated_at !== stamp.value) {
-    status.textContent = "El registro cambió. Recarga para editar.";
-    return;
+const activeLine = row => !["Cancelado","Anulado"].includes(row.data.status);
+const donePurchase = data => ["Comprado","Cargado","Preparado","Completado","Entregado"].includes(data.status);
+let newPurchase = false;
+const purchaseForm = purchases;
+function remainingOrder(order) {
+  const data = order.data;
+  const key = data.quantityUnit === "pales" ? "sgBoughtPallets" : "boxes";
+  const reserved = records.purchases.filter(row=>activeLine(row)&&row.data.orderId===order.id)
+    .reduce((sum,row)=>sum+(Number(row.data[key])||0),0);
+  return Math.max(0,(Number(data.boxes)||0)-reserved);
+}
+function purchaseQuantity(data,isPurchase,amount) {
+  const pallets = data.quantityUnit === "pales";
+  const value = isPurchase ? (pallets ? data.sgBoughtPallets : data.boxes) : amount;
+  if (Number(value)>0) return pallets ? formatPallets(value)+(Number(value)<=1?" palé":" palés") : qty(value)+(Number(value)===1?" caja":" cajas");
+  return isPurchase && kilos(data)>0 ? qty(kilos(data))+" kg" : "";
+}
+purchases = () => {
+  if (newPurchase || editing?.t==="purchases") return purchaseForm();
+  const chosen = sgSelectedClient();
+  const groups = new Map();
+  function add(row,kind,amount) {
+    const data = row.data;
+    const isPurchase = kind === "purchase";
+    const status = isPurchase && donePurchase(data) ? "done" : "pending";
+    const quantity = purchaseQuantity(data,isPurchase,amount);
+    const unit = data.priceUnit === "caja" ? "caja" : data.priceUnit === "pale" ? "palé" : "kg";
+    const cost = data.priceCents==null&&data.price==null ? "—" : fmt(price(data))+"/"+unit;
+    const label = [quantity,data.product,data.variety].filter(Boolean).join(" ");
+    const line = '<tr class="'+status+'" data-kind="'+kind+'" data-purchase-line="'+html(row.id)+'"'
+      + (isPurchase?' data-sg10-record="'+html(row.id)+'"':'') + '>'
+      + '<td><button type="button" class="dailyCell" data-focus="pProduct">'+html(label)+'</button></td>'
+      + '<td><button type="button" class="dailyCell" data-focus="pPrice">'+html(cost)+'</button></td>'
+      + '<td><button type="button" class="dailyCell" data-focus="pSupplier">'+html(data.supplier||"—")+'</button></td></tr>';
+    if (!groups.has(data.clientId)) groups.set(data.clientId,[]);
+    groups.get(data.clientId).push(line);
   }
-  const value = fieldInput.value.trim();
-  const data = {...d(original)};
-  if (field === "price") {
-    if (value && !/^\d+(?:[.,]\d{1,2})?$/.test(value)) {
-      status.textContent = "Usa un precio positivo con hasta dos decimales.";
-      return;
-    }
-    data.price = value ? Number(value.replace(",",".")) : null;
-    data.priceCents = data.price === null ? null : Math.round(data.price*100);
-  } else if (field === "boxes") {
-    const amount = data.quantityUnit === "pales" && /^(?:½|1\/2)$/.test(value) ? 0.5 : validNumber(value);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      status.textContent = "Introduce una cantidad positiva.";
-      return;
-    }
-    data.boxes = amount;
-  } else data.supplier = value;
-  for (const input of inputs) input.disabled = true;
-  status.textContent = "Guardando…";
-  save(collection,data,rowId).then(() => {
-    fieldInput.defaultValue = fieldInput.value;
-    stamp.value = get(collection,rowId).updated_at;
-    status.textContent = "Guardado";
-  }).catch(error => { status.textContent = error.message; })
-    .finally(() => { for (const input of inputs) input.disabled = false; });
+  for (const row of records.orders.filter(row=>sgClientMatch(row)&&activeLine(row)&&!donePurchase(row.data))) {
+    const amount = remainingOrder(row);
+    if (amount>0) add(row,"order",amount);
+  }
+  for (const row of records.purchases.filter(row=>sgClientMatch(row)&&activeLine(row))) add(row,"purchase");
+  const body = [...groups].sort(([a],[b])=>name(a).localeCompare(name(b),"es")).map(([id,rows])=>
+    (chosen ? "" : '<tr class="purchase-company"><th colspan="3" scope="rowgroup">'+html(name(id))+'</th></tr>')+rows.join("")).join("");
+  return '<div class="card" id="purchaseSheet"><div class="sg10-page-tools"><button type="button" class="primary" data-new-purchase>+ Nueva compra</button></div>'
+    + '<table><thead><tr><th>Producto</th><th>Precio</th><th>Puesto</th></tr></thead><tbody>'+body+'</tbody></table>'
+    + (body?"":"<p>No hay compras ni pedidos pendientes para esta selección.</p>")+'</div>';
+};
+
+function fillPurchaseOrder(order) {
+  if (!order) return;
+  const data = order.data;
+  $("pClient").value=data.clientId;
+  $("pDate").value=data.date;
+  $("pOrder").value=order.id;
+  $("pProduct").value=data.product;
+  $("pVariety").value=data.variety||"";
+  $("pBoxes").value=data.quantityUnit==="pales"?0:remainingOrder(order);
+  const pallets=$("sg10PurchasePallets");
+  if (pallets) pallets.value=data.quantityUnit==="pales"?formatPallets(remainingOrder(order)):"";
+}
+function focusPurchase(field) {
+  const input = $(field);
+  if (!input) return;
+  const details = input.closest("details");
+  if (details) details.open=true;
+  input.focus();
+}
+window.sg10OpenPurchaseForm = (orderId,field) => {
+  const order=get("orders",orderId);
+  if (order) {
+    sgNavDate=order.data.date;
+    sgNavClient=order.data.clientId;
+  }
+  newPurchase=true;
+  originalGo("compras");
+  if (!$("pOrder")) return;
+  sgRefreshOrderChoices();
+  fillPurchaseOrder(order);
+  $("pOrder").dispatchEvent(new Event("change"));
+  focusPurchase(field || (order ? "pSupplier" : "pProduct"));
+};
+
+function decoratePurchaseSheet() {
+  const sheet=$("purchaseSheet");
+  if (!sheet) return;
+  sheet.querySelector("[data-new-purchase]").onclick=()=>window.sg10OpenPurchaseForm();
+  for (const button of sheet.querySelectorAll("[data-focus]")) {
+    const {kind,purchaseLine}=button.closest("tr").dataset;
+    const existing=kind==="purchase";
+    const orderId=existing?d(get("purchases",purchaseLine)).orderId:purchaseLine;
+    if (button.dataset.focus==="pSupplier") bindSplitHold(button,orderId);
+    button.onclick=()=>{
+      if (button.dataset.sg10Held==="1") { button.dataset.sg10Held="0"; return; }
+      if (existing) { edit("purchases",purchaseLine); focusPurchase(button.dataset.focus); }
+      else window.sg10OpenPurchaseForm(purchaseLine,button.dataset.focus==="pProduct"?"pSupplier":button.dataset.focus);
+    };
+  }
+}
+function decoratePurchaseForm() {
+  const picker=$("pOrder");
+  if (!picker) return;
+  const original=get("purchases",editing?.id);
+  const card=picker.closest(".card");
+  card.querySelector("h2").textContent=original?"Editar compra":"Nueva compra";
+  operations.decoratePurchase();
+  picker.addEventListener("change",()=>{
+    if (!original) fillPurchaseOrder(get("orders",picker.value));
+  });
+  if (original?.data.orderId) {
+    $("pProduct").readOnly=true;
+    $("pVariety").readOnly=true;
+  }
+  const extra=document.createElement("details");
+  extra.className="sg10-advanced";
+  extra.innerHTML="<summary>Carga, peso, IVA y observaciones</summary>";
+  extra.append($("pMode").parentElement,$("realWeight"),$("fixedWeight"),
+    $("sg10Tara").parentElement,$("sg10Vat").parentElement,$("sg10FixedWeightButton"));
+  const notes=$("pNotes");
+  extra.append(notes.previousElementSibling,notes);
+  card.querySelector(".actions").before(extra);
+  const exit=document.createElement("button");
+  exit.type="button";exit.className="secondary";exit.textContent="Volver a compras";
+  exit.onclick=()=>go("compras");
+  const actions=card.querySelector(".actions");
+  actions.querySelector('button[onclick="cancel()"]')?.remove();
+  actions.append(exit);
+  if (original) {
+    const load=document.createElement("button");
+    load.type="button";load.textContent="Registrar carga";
+    load.onclick=()=>{extra.open=true;$("pStatus").value="Cargado";focusPurchase(val("pMode")==="fixed"?"pKgBox":"pKg");};
+    const removeButton=document.createElement("button");
+    removeButton.type="button";removeButton.className="danger";removeButton.textContent="Eliminar compra";
+    removeButton.onclick=()=>remove("purchases",original.id);
+    actions.append(load,removeButton);
+  }
 }
 
 function decorate() {
-  const content = $("content");
-  if (!["pedidos","compras"].includes(page)) return;
-  for (const button of content.querySelectorAll("button[onclick^='edit(']")) {
-    const match = button.getAttribute("onclick").match(/^edit\('(orders|purchases)','([^']+)'\)/);
-    if (!match) continue;
-    const [,collection,id] = match;
-    const row = get(collection,id);
-    const card = button.closest(".item") || button.closest("tr");
-    if (!row || !card || card.querySelector(".sg10-inline")) continue;
-    card.dataset.sg10Record = id;
-    const data = d(row);
-    card.classList.toggle("sg10-pending",["Pendiente","En compra","Parcial"].includes(data.status));
-    card.classList.toggle("sg10-done",["Comprado","Completado","Cargado","Completo","Entregado"].includes(data.status));
-    if (card.tagName === "TR") continue;
-    const panel = document.createElement("div");
-    panel.className = "sg10-inline";
-    const feedback = document.createElement("small");
-    feedback.setAttribute("role","status");
-    const stamp = {value:row.updated_at};
-    const fields = {boxes:data.boxes ?? "",price:priceInput(data),supplier:data.supplier ?? ""};
-    for (const [key,value] of Object.entries(fields)) {
-      const label = document.createElement("label");
-      label.textContent = {boxes:"Cantidad",price:"Precio",supplier:"Puesto"}[key];
-      const field = document.createElement("input");
-      field.value = field.defaultValue = String(value);
-      field.maxLength = key === "supplier" ? 160 : 14;
-      if (key !== "supplier") field.inputMode = "decimal";
-      field.addEventListener("change",event => changeInline(event,collection,id,key,feedback,stamp));
-      label.append(field);
-      panel.append(label);
-    }
-    panel.append(feedback);
-    card.append(panel);
+  if (page === "compras") {
+    decoratePurchaseSheet();
+    decoratePurchaseForm();
+    return;
   }
-  if (page === "pedidos" && $("oUnit")) {
-    const half = document.createElement("button");
-    half.type = "button";
-    half.className = "secondary";
-    half.textContent = "½ palé";
-    half.onclick = () => { $("oBoxes").value = "½"; $("oUnit").value = "pales"; $("oUnit").dataset.manual = "1"; };
-    $("oUnit").after(half);
-  }
-  if (page === "compras" && $("pPrice")) operations.decoratePurchase();
+  if (page !== "pedidos" || !$("oUnit")) return;
+  const half = document.createElement("button");
+  half.type = "button";
+  half.className = "secondary";
+  half.textContent = "½ palé";
+  half.onclick = () => { $("oBoxes").value = "½"; $("oUnit").value = "pales"; $("oUnit").dataset.manual = "1"; };
+  $("oUnit").after(half);
+  const date = $("oDate");
+  const tomorrow = document.createElement("button");
+  tomorrow.type = "button";
+  tomorrow.textContent = "Mañana";
+  tomorrow.onclick = () => {
+    const next = new Date(today()+"T12:00:00Z");
+    next.setUTCDate(next.getUTCDate()+1);
+    date.value=next.toISOString().slice(0,10);
+  };
+  date.after(tomorrow);
 }
 
 function loadSheet() {
@@ -474,7 +555,10 @@ render = function (...args) {
   return result;
 };
 const originalGo = go;
+const originalSection = sgGo;
+sgGo = function (target) { newPurchase = false; return originalSection(target); };
 go = function (target) {
+  newPurchase = false;
   if (target === "galeria" || target === "facturas" || target === "cargas" || target === "pales") {
     page = target;
     editing = null;

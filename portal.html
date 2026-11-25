@@ -49,15 +49,27 @@
       <h1 id="company-name">Mi empresa</h1>
       <label id="spaces-label" hidden>Empresa <select id="spaces"></select></label>
     </div>
-    <nav class="portal-nav" aria-label="Secciones de Zona Clientes">
-      <a href="#galeria">Productos</a><a href="#pedidos" id="portal-order-link">Pedido</a>
-      <a href="#history">Historial</a><a href="#facturas">Facturas</a><a href="#comisiones">Comisiones</a>
-    </nav>
-    <section class="panel portal-products" id="galeria">
-      <h2>Productos disponibles</h2>
-      <div class="sg10-galleryrow" id="gallery-list" tabindex="0" aria-label="Fotos de productos"></div>
-    </section>
-    <section class="panel" id="pedidos">
+    <div id="portal-home">
+      <section id="galeria" aria-labelledby="gallery-heading">
+        <div class="portal-catalog-heading">
+          <h2 id="gallery-heading">Catálogo de productos</h2>
+          <button id="gallery-motion" type="button" aria-pressed="false" hidden>Pausar</button>
+        </div>
+        <div id="gallery-list" tabindex="0" aria-label="Fotografías de los productos">
+          <div id="gallery-track"><div id="gallery-items"></div></div>
+        </div>
+        <p id="gallery-message" role="status"></p>
+      </section>
+      <nav class="portal-tiles" aria-label="Secciones de Zona Clientes">
+        <a class="portal-tile" href="#pedidos"><span aria-hidden="true">📦</span><strong>Pedidos</strong><small>Escribir o dictar un pedido</small></a>
+        <a class="portal-tile" href="#facturas"><span aria-hidden="true">🧾</span><strong>Facturas</strong><small>Facturas de tu empresa</small></a>
+        <a class="portal-tile" href="#assistant-section"><span aria-hidden="true">🔍</span><strong>Consultar producto</strong><small>Preguntar a Aguacatín</small></a>
+        <a class="portal-tile" href="#comisiones"><span aria-hidden="true">📊</span><strong>Comisiones</strong><small>Liquidaciones publicadas</small></a>
+        <a class="portal-tile" href="#history"><span aria-hidden="true">📋</span><strong>Historial</strong><small>Pedidos, compras y cargas</small></a>
+      </nav>
+    </div>
+    <a id="portal-back" href="#inicio" hidden>← Volver a Zona Clientes</a>
+    <section class="panel" id="pedidos" data-portal-section hidden>
       <h2>Nuevo pedido</h2>
       <label>Fecha de entrega <input type="date" id="order-date" required></label>
       <label>Texto del pedido <textarea id="source" rows="3" maxlength="5500" placeholder="10 cajas de tomate pera y 2 palés de patata"></textarea></label>
@@ -72,7 +84,7 @@
         <p id="order-status" role="status"></p>
       </form>
     </section>
-    <section class="panel" id="history">
+    <section class="panel" id="history" data-portal-section hidden>
       <h2>Historial y compras</h2>
       <form id="filter" class="sg10-tools">
         <label>Desde <input type="date" id="from-date" required></label>
@@ -81,12 +93,12 @@
       </form>
       <div id="history-list"></div>
     </section>
-    <section class="panel" id="facturas"><h2>Facturas autorizadas</h2><div id="invoice-list"></div></section>
-    <section class="panel" id="comisiones">
+    <section class="panel" id="facturas" data-portal-section hidden><h2>Facturas autorizadas</h2><div id="invoice-list"></div></section>
+    <section class="panel" id="comisiones" data-portal-section hidden>
       <h2>Comisiones</h2>
       <div id="commission-list"></div>
     </section>
-    <section class="panel" id="assistant-section">
+    <section class="panel" id="assistant-section" data-portal-section hidden>
       <div class="portal-assistant-heading"><img src="./sg10/aguacatin.png" alt="" width="44" height="55"><h2>Preguntar a Aguacatín</h2></div>
       <form id="assistant-form"><label>Consulta sobre tu empresa <input id="question" required maxlength="500" placeholder="¿Qué se ha comprado hoy?"></label><button>Consultar</button></form>
       <p id="assistant-answer" role="status"></p>
