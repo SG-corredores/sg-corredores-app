@@ -5,6 +5,8 @@
 .sg10-pending{background:#fff6d9!important}.sg10-done{background:#e2f5e8!important}
 .sg10-inline{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.5rem;margin-top:.55rem}.sg10-inline input{width:100%;min-width:0}
 .sg10-inline small{align-self:center}.sg10-highlight{outline:3px solid #368252;scroll-margin:3rem}
+.sg10-gallery-entry{display:flex;align-items:center;gap:.75rem;margin-bottom:.55rem}
+.sg10-gallery-entry .sg10-poster[hidden]{display:none}
 .sg10-poster{width:130px;height:95px;object-fit:cover;border-radius:10px;display:block}
 .sg10-galleryrow{display:flex;overflow-x:auto;gap:.8rem;scroll-snap-type:x proximity;scrollbar-width:thin}
 .sg10-galleryrow article{flex:0 0 170px;scroll-snap-align:start;border-radius:12px;overflow:hidden;background:#e9f4ed;padding:.65rem}
