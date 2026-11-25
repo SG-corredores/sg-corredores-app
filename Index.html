@@ -134,13 +134,13 @@ function sgArticleAnswer(raw){
  if(!m)return null;
  const base=new Date(today()+'T12:00:00Z');const explicit=q.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];const offset=/\banteayer\b/.test(q)?-2:/\bayer\b/.test(q)?-1:/\bmanana\b/.test(q)?1:0;base.setUTCDate(base.getUTCDate()+offset);const date=explicit||base.toISOString().slice(0,10);
  const term=m[1].replace(/\b(para hoy|para manana|hoy|ayer|anteayer|manana|por favor)\b/g,' ').replace(/\b20\d{2}-\d{2}-\d{2}\b/g,'').replace(/^(?:el|la|los|las|de)\s+/,'').trim();
- const stem=t=>t.replace(/(?:es|s)$/,'');
- const tokens=term.split(/\s+/).filter(Boolean).map(stem);
+ const forms=t=>new Set([t,...(t.endsWith('s')?[t.slice(0,-1)]:[]),...(t.endsWith('es')?[t.slice(0,-2)]:[]),...(t.endsWith('ces')?[t.slice(0,-3)+'z']:[])]); const matchesWord=(a,b)=>[...forms(a)].some(v=>forms(b).has(v));
+ const tokens=term.split(/\s+/).filter(Boolean);
  if(!tokens.length)return 'Dime el artículo que quieres consultar.';
  const groups=new Map();
  for(const r of records.orders){const x=d(r);if(x.date!==date||/^(cancelado|anulado)$/.test(norm(x.status)))continue;
- const words=norm((x.product||'')+' '+(x.variety||'')).split(/[^a-z0-9]+/).map(stem);
- if(!tokens.every(t=>words.includes(t)))continue;
+ const words=norm((x.product||'')+' '+(x.variety||'')).split(/[^a-z0-9]+/).filter(Boolean);
+ if(!tokens.every(t=>words.some(w=>matchesWord(t,w))))continue;
  const g=groups.get(x.clientId)||{name:d(get('clients',x.clientId)).name||'Cliente sin nombre',c:0,p:0};
  const n=Number(x.boxes)||0;if(x.quantityUnit==='pales')g.p+=n;else g.c+=n;groups.set(x.clientId,g);
  }
