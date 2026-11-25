@@ -1,11 +1,17 @@
-import { publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js";
+import { openInvitation, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
 const orderStatus = (message) => { element("order-status").textContent = message; };
+const params = new URLSearchParams(location.search);
+const previewMembership = params.has("vista") && params.has("empresa")
+  ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
+const invitation = previewMembership ? null : openInvitation("portal");
 const api = window.supabase?.createClient(publicConfig.url, publicConfig.key, {
-  auth: { storageKey: "sg10-customer-session", persistSession: true, detectSessionInUrl: true, autoRefreshToken: true },
+  auth: { ...(previewMembership ? {} : {storageKey:"sg10-customer-session"}), persistSession:true,
+    detectSessionInUrl:!previewMembership, autoRefreshToken:true },
 });
+if (invitation?.token) status("Invitación de cliente. Introduce el correo al que va dirigida.");
 let user, membership, memberships = [], inbox, request, gallery = [], galleryVersion = 0, refreshVersion = 0;
 let lineCounter = 0;
 let history = [];
@@ -48,7 +54,7 @@ async function refresh() {
   const from_date = element("from-date").value;
   const to_date = element("to-date").value;
   const { workspace:space, company } = selected();
-  const { data, error } = await api.rpc("sg10_portal_snapshot", { space, company, from_date, to_date });
+  const { data, error } = await api.rpc(previewMembership ? "sg10_admin_portal_snapshot" : "sg10_portal_snapshot", { space, company, from_date, to_date });
   if (number !== refreshVersion) return;
   if (error || !data) throw error ?? Error("Esta empresa no está disponible.");
   element("company-name").textContent = data.company;
@@ -91,8 +97,9 @@ element("gallery-list").onclick = ({target}) => {
   if (!row) return;
   element("photo-content").innerHTML = (row.url ? '<img src="' + esc(row.url) + '" alt="' + esc(row.product) + '">' : '')
     + '<h2>' + esc(row.product) + '</h2><p>' + esc(row.description) + '</p><p>' + esc(row.price == null ? "" : row.price + " €/" + row.unit)
-    + '</p><button type="button">Pedir este producto</button>';
-  element("photo-content").querySelector("button").onclick = () => {
+    + (previewMembership ? "</p>" : '</p><button type="button">Pedir este producto</button>');
+  const orderButton = element("photo-content").querySelector("button");
+  if (orderButton) orderButton.onclick = () => {
     const blank = [...element("lines").querySelectorAll("fieldset")].find(row => !row.querySelector('[name="product"]').value);
     if (blank) blank.querySelector('[name="product"]').value = row.product;
     else addLine({product:row.product});
@@ -218,7 +225,33 @@ async function connect() {
   const result = await api.auth.getSession();
   if (result.error) throw result.error;
   user = result.data.session?.user;
+  if(previewMembership){
+    element("login").hidden=true;
+    element("admin-preview").hidden=false;
+    if(!user)throw Error("Abre la vista desde tu sesión de administrador.");
+    membership=previewMembership;
+    try{
+      await refresh();
+      await loadGallery();
+      element("pedidos").hidden=true;
+      element("assistant-section").hidden=true;
+      element("portal").hidden=false;
+    }catch(error){
+      membership=null;
+      throw error;
+    }
+    return;
+  }
   if (!user) return;
+  if(invitation?.token){
+    const { error }=await api.rpc("sg10_redeem_whatsapp_invite",{p_token:invitation.token,p_customer:true});
+    if(error){
+      await api.auth.signOut({scope:"local"});
+      throw error;
+    }
+    localStorage.removeItem(invitation.key);
+    status("");
+  }
   const links = await api.from("sg10_company_users").select("workspace_id,client_id").eq("user_id",user.id);
   if (links.error) throw links.error;
   memberships = links.data;
@@ -247,7 +280,7 @@ element("login-form").onsubmit = async (event) => {
   submit.disabled = true;
   try {
     const { error } = await api.auth.signInWithOtp({email:element("email").value.trim(),options:{
-      shouldCreateUser:false,emailRedirectTo:new URL("./portal.html",location.href).href,
+      shouldCreateUser:Boolean(invitation?.token),emailRedirectTo:new URL(invitation?.token?"./Index.html":"./portal.html",location.href).href,
     }});
     if (error) throw error;
     status("Abre el enlace recibido en el correo de tu empresa.");

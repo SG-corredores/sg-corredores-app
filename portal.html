@@ -24,6 +24,7 @@
   </div>
 </header>
 <main>
+  <section class="panel" id="admin-preview" hidden><strong>Vista de administrador · Solo lectura</strong> <a href="./Index.html">Volver a SG Corredores</a></section>
   <section class="panel" id="login">
     <h1>Accede a tu empresa</h1>
     <form id="login-form">
@@ -65,7 +66,7 @@
       <div id="history-list"></div>
     </section>
     <section class="panel" id="facturas"><h2>Facturas autorizadas</h2><div id="invoice-list"></div></section>
-    <section class="panel">
+    <section class="panel" id="assistant-section">
       <h2>Preguntar a Aguacatín</h2>
       <form id="assistant-form"><label>Consulta sobre tu empresa <input id="question" required maxlength="500" placeholder="¿Qué se ha comprado hoy?"></label><button>Consultar</button></form>
       <p id="assistant-answer" role="status"></p>

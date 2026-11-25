@@ -1,4 +1,4 @@
-export const version = "10.0.0-rc.1";
+export const version = "10.0.0-rc.2";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",
@@ -196,4 +196,33 @@ export function readPallets(value) {
   if (half) return Number(half[1] || half[2] || 0) + 0.5;
   const number = validNumber(text);
   return number > 0 && Number.isInteger(number * 2) ? number : NaN;
+}
+
+export function openInvitation(surface) {
+  const key = "sg10-" + surface + "-invite";
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const token = fragment.get("sg-invitacion");
+  if (/^[a-f0-9]{64}$/.test(token ?? "")) {
+    localStorage.setItem(key, token);
+    window.history.replaceState(null, "", location.pathname + location.search);
+  }
+  return { key, token: localStorage.getItem(key) };
+}
+
+export async function prepareWhatsAppInvite(api, workspace, email, company, target) {
+  const {data: token, error} = await api.rpc("sg10_create_whatsapp_invite", {
+    p_workspace: workspace, p_email: email, p_client: company,
+  });
+  if (error) throw error;
+  if (!/^[a-f0-9]{64}$/.test(token ?? "")) throw Error("No se pudo generar la invitación.");
+  const invitation = new URL(company === null ? "./Index.html" : "./portal.html", location.href);
+  invitation.hash = "sg-invitacion=" + token;
+  const text = "SG Corredores te invita a " + (company === null ? "la app de empleados" : "la Zona Clientes")
+    + ". Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.\n" + invitation.href;
+  const share = document.createElement("a");
+  share.href = "https://wa.me/?text=" + encodeURIComponent(text);
+  share.target = "_blank";
+  share.rel = "noopener noreferrer";
+  share.textContent = "Abrir WhatsApp para compartir";
+  target.replaceChildren(share);
 }

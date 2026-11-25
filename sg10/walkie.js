@@ -2,8 +2,29 @@ import { invoke } from "./common.js";
 
 export function installWalkie({connection,dialog}) {
   let room, privateRoom, widget, sdk, userId, microphone, muted=false, audio;
-  let holding=false, holdVersion=0, tuning=0.8, opening=false;
+  let holding=false, tuning=0.8, opening, transmission, roomGeneration=0, switching=false;
   const tracks=new Map();
+  const shortcut=document.createElement("button");
+  shortcut.type="button";
+  shortcut.className="sg10-walkie-shortcut";
+  shortcut.hidden=true;
+  shortcut.setAttribute("aria-label","Walkie-talkie · Mantén pulsado para hablar");
+  shortcut.setAttribute("aria-pressed","false");
+  shortcut.title="Mantén pulsado para hablar";
+  shortcut.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8V3m-2 5h10a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm3 4h4m-4 3h4m-4 3h2m9-12a5 5 0 0 1 0 7"/></svg>';
+  const feedback=document.createElement("div");
+  feedback.className="sg10-walkie-feedback";
+  feedback.setAttribute("role","status");
+  feedback.setAttribute("aria-live","polite");
+  feedback.hidden=true;
+  document.body.append(shortcut,feedback);
+  let feedbackTimer;
+  function showFeedback(text, timeout=0){
+    clearTimeout(feedbackTimer);
+    feedback.textContent=text;
+    feedback.hidden=!text;
+    if(timeout)feedbackTimer=setTimeout(()=>showFeedback(""),timeout);
+  }
   const output=()=>widget?.querySelector("[data-live]");
   const state=(text)=>{if(output())output().textContent=text;};
   function beep(){
@@ -77,22 +98,82 @@ export function installWalkie({connection,dialog}) {
     return joined;
   }
   async function start(){
-    if(!room||holding)return;
+    if(holding||switching)return;
+    const attempt={};
     holding=true;
-    const attempt=++holdVersion,current=privateRoom||room;
-    try {
-      await current.localParticipant.setMicrophoneEnabled(true);
-      if(!holding||attempt!==holdVersion){await current.localParticipant.setMicrophoneEnabled(false);return;}
-      beep();state("Estás hablando");
-    }catch(error){holding=false;state("Micrófono: "+error.message);}
+    transmission=attempt;
+    showFeedback(room ? "Abriendo micrófono…" : "Conectando al walkie…");
+    try{
+      const current=await ensureRoom();
+      if(transmission!==attempt)return;
+      attempt.room=privateRoom||current;
+      if(!navigator.mediaDevices?.getUserMedia)throw Error("Este navegador no permite usar el micrófono.");
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+      if(transmission!==attempt){
+        stream.getTracks().forEach(track=>track.stop());
+        return;
+      }
+      attempt.stream=stream;
+      const audioTrack=stream.getAudioTracks()[0];
+      if(!audioTrack)throw Error("No se encontró un micrófono.");
+      audioTrack.enabled=false;
+      const track=new sdk.LocalAudioTrack(audioTrack);
+      attempt.track=track;
+      await track.mute();
+      if(transmission!==attempt)return;
+      attempt.publishing=true;
+      await attempt.room.localParticipant.publishTrack(track,{source:sdk.Track.Source.Microphone,stopMicTrackOnMute:false});
+      if(transmission!==attempt){
+        await attempt.room.localParticipant.unpublishTrack(track,false);
+        return;
+      }
+      await track.unmute();
+      if(transmission!==attempt)return;
+      shortcut.setAttribute("aria-pressed","true");
+      beep();state("Estás hablando");showFeedback("Estás hablando");
+    }catch(error){
+      if(transmission===attempt){
+        stop();
+        const message=error.message||"No se pudo abrir el micrófono.";
+        state(message);
+        showFeedback(message,5000);
+      }
+    }
   }
   function stop(){
     if(!holding)return;
-    holding=false;holdVersion++;
-    (privateRoom||room)?.localParticipant.setMicrophoneEnabled(false).catch(()=>{});
+    const attempt=transmission;
+    holding=false;
+    transmission=null;
+    attempt?.stream?.getTracks().forEach(track=>track.stop());
+    if(attempt?.track&&!attempt.publishing)attempt.track.stop();
+    if(attempt?.track&&attempt.publishing)attempt.room.localParticipant.unpublishTrack(attempt.track,false).catch(()=>{});
+    shortcut.setAttribute("aria-pressed","false");
     state(privateRoom?"Canal privado":"Canal general");
+    showFeedback("");
   }
+  function bindPushToTalk(button){
+    button.addEventListener("pointerdown",event=>{
+      if(!event.isPrimary||event.button!==0)return;
+      button.setPointerCapture(event.pointerId);
+      void start();
+    });
+    for(const name of ["pointerup","pointercancel","lostpointercapture","blur"])button.addEventListener(name,stop);
+    button.addEventListener("keydown",event=>{
+      if(!["Space","Enter"].includes(event.code))return;
+      event.preventDefault();
+      if(!event.repeat)void start();
+    });
+    button.addEventListener("keyup",event=>{
+      if(!["Space","Enter"].includes(event.code))return;
+      event.preventDefault();
+      stop();
+    });
+    button.addEventListener("contextmenu",event=>event.preventDefault());
+  }
+  bindPushToTalk(shortcut);
   async function close(){
+    roomGeneration++;
     stop();
     await Promise.allSettled([privateRoom?.disconnect(),room?.disconnect()]);
     privateRoom=room=null;
@@ -110,10 +191,7 @@ export function installWalkie({connection,dialog}) {
       +'</div><label>Volumen <input type="range" min="0" max="1" step=".05" value=".8"></label>';
     document.body.append(widget);
     const ptt=widget.querySelector("[data-ptt]");
-    ptt.onpointerdown=(event)=>{if(event.button!==0)return;ptt.setPointerCapture(event.pointerId);start();};
-    for(const name of ["pointerup","pointercancel","lostpointercapture"])ptt.addEventListener(name,stop);
-    ptt.onkeydown=(event)=>{if(event.code==="Space"&&!event.repeat){event.preventDefault();start();}};
-    ptt.onkeyup=(event)=>{if(event.code==="Space"){event.preventDefault();stop();}};
+    bindPushToTalk(ptt);
     widget.querySelector("[data-mute]").onclick=({currentTarget:button})=>{muted=!muted;button.textContent=muted?"Quitar silencio":"Silenciar";sound();};
     widget.querySelector("[data-listen]").onclick=()=>{(privateRoom||room)?.startAudio();audio?.resume();sound();};
     widget.querySelector("[data-close]").onclick=close;
@@ -121,7 +199,7 @@ export function installWalkie({connection,dialog}) {
     widget.querySelector("[data-peer]").onchange=async({target})=>{
       const peer=target.value;
       stop();
-      target.disabled=true;ptt.disabled=true;
+      switching=true;target.disabled=true;ptt.disabled=true;
       try{
         await privateRoom?.disconnect();privateRoom=null;
         if(peer){
@@ -130,7 +208,7 @@ export function installWalkie({connection,dialog}) {
         }
         sound();state(peer?"Canal privado":"Canal general");
       }catch(error){state(error.message);target.value="";}
-      finally{target.disabled=false;ptt.disabled=false;}
+      finally{switching=false;target.disabled=false;ptt.disabled=false;}
     };
     const handle=widget.querySelector(".sg10-walkie-drag");
     handle.onpointerdown=(event)=>{
@@ -148,19 +226,35 @@ export function installWalkie({connection,dialog}) {
   }
   document.addEventListener("visibilitychange",()=>{if(document.hidden)stop();});
   window.addEventListener("pagehide",stop);
+  function ensureRoom(){
+    if(room)return Promise.resolve(room);
+    if(!opening){
+      const generation=roomGeneration;
+      opening=(async()=>{
+        const Context=window.AudioContext||window.webkitAudioContext;
+        if(Context&&!audio){audio=new Context();await audio.resume().catch(()=>{});}
+        const joined=await connect();
+        if(generation!==roomGeneration){
+          await joined.disconnect();
+          throw Error("Se cerró el walkie-talkie.");
+        }
+        room=joined;
+        state("Canal general");online();
+        if(widget)widget.querySelector("[data-ptt]").disabled=false;
+        return room;
+      })().finally(()=>{opening=null;});
+    }
+    return opening;
+  }
   return {
     close,
+    showShortcut(visible){shortcut.hidden=!visible;},
     async open(){
-      if(widget||opening)return;
-      opening=true;makeWidget();
+      if(!widget)makeWidget();
       try{
-        const Context=window.AudioContext||window.webkitAudioContext;
-        if(Context){audio=new Context();await audio.resume().catch(()=>{});}
-        room=await connect();
-        if(!widget){await room.disconnect();room=null;return;}
-        state("Canal general");online();widget.querySelector("[data-ptt]").disabled=false;
+        await ensureRoom();
+        if(widget){widget.querySelector("[data-ptt]").disabled=false;online();}
       }catch(error){state(error.message);}
-      finally{opening=false;}
     },
   };
 }

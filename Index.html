@@ -9,7 +9,7 @@ header h1{font-size:27px}body{background:#f3f8f4}#nav{position:sticky;bottom:0;t
 </style><style>
 #aguFloat{position:fixed;right:12px;bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:40;pointer-events:none;display:flex;flex-direction:column;align-items:flex-end;max-width:calc(100vw - 20px)}
 #aguFloat button,#aguFloat input{pointer-events:auto}#aguAvatar{position:relative;z-index:2;width:75px;height:104px;background:transparent;border:0;box-shadow:none;padding:0;overflow:visible;filter:drop-shadow(0 4px 5px #102c1f66);transition:width .2s,height .2s}#aguAvatar img{width:100%;height:100%;object-fit:contain}#aguFloat.aguExpanded #aguAvatar{width:150px;height:205px;animation:aguBob 1.2s ease-in-out infinite alternate}#aguFloat.aguListening #aguAvatar{filter:drop-shadow(0 0 12px #20d977)}@keyframes aguBob{to{transform:translateY(-7px) rotate(3deg)}}
-#aguControls{position:relative;max-width:100%;width:min(350px,calc(100vw - 24px));margin-bottom:8px;display:flex;flex-direction:column;align-items:flex-end;gap:7px;pointer-events:none}#aguControls[hidden]{display:none!important}#aguBubble{max-width:100%;background:#086b36;color:white;padding:10px 14px;border-radius:18px;box-shadow:0 4px 15px #153c2b33;font-size:14px;pointer-events:auto}#aguEntry{width:100%;display:flex;align-items:center;gap:4px;padding:5px;background:#fff;border:1px solid #b3e5c5;border-radius:28px;box-shadow:0 5px 20px #153c2b33;pointer-events:auto}#aguEntry input{flex:1;min-width:0;border:0!important;outline:0!important;padding:8px;background:transparent;font-size:14px}#aguEntry button{border-radius:50%;background:#087a3b;color:white;padding:0;width:36px;height:36px;flex-shrink:0}#aguControls .aguClose{background:#fff;color:#173c28;border-radius:50%;padding:0;width:30px;height:30px;box-shadow:0 2px 10px #0003;pointer-events:auto}#aguWave{display:flex;gap:3px;height:23px;align-items:center;margin-right:20px}#aguWave i{display:block;width:4px;height:8px;border-radius:4px;background:#1bd66b;animation:aguWave 650ms infinite alternate}#aguWave i:nth-child(2){animation-delay:130ms}#aguWave i:nth-child(3){animation-delay:240ms}#aguWave i:nth-child(4){animation-delay:90ms}#aguWave i:nth-child(5){animation-delay:300ms}@keyframes aguWave{to{height:23px}}#aguFloat:not(.aguListening) #aguWave{display:none}#aguModal{display:none!important}
+#aguControls{position:relative;max-width:100%;width:min(350px,calc(100vw - 24px));margin-bottom:8px;display:flex;flex-direction:column;align-items:flex-end;gap:7px;pointer-events:none}#aguControls[hidden]{display:none!important}#aguBubble{max-width:100%;background:#086b36;color:white;padding:10px 14px;border-radius:18px;box-shadow:0 4px 15px #153c2b33;font-size:14px;pointer-events:auto}#aguEntry{width:100%;display:flex;align-items:center;gap:4px;padding:5px;background:#fff;border:1px solid #b3e5c5;border-radius:28px;box-shadow:0 5px 20px #153c2b33;pointer-events:auto}#aguEntry input{flex:1;min-width:0;border:0!important;outline:0!important;padding:8px;background:transparent;font-size:14px}#aguEntry button{border-radius:50%;background:#087a3b;color:white;padding:0;width:36px;height:36px;flex-shrink:0}#aguWave{display:flex;gap:3px;height:23px;align-items:center;margin-right:20px}#aguWave i{display:block;width:4px;height:8px;border-radius:4px;background:#1bd66b;animation:aguWave 650ms infinite alternate}#aguWave i:nth-child(2){animation-delay:130ms}#aguWave i:nth-child(3){animation-delay:240ms}#aguWave i:nth-child(4){animation-delay:90ms}#aguWave i:nth-child(5){animation-delay:300ms}@keyframes aguWave{to{height:23px}}#aguFloat:not(.aguListening) #aguWave{display:none}#aguModal{display:none!important}
 </style><style id="sg-identity-2026">
 header{border-radius:0!important;background:linear-gradient(120deg,#063e23,#08753b)!important;padding:12px 15px 17px!important}
 .sg-brand{display:flex;align-items:center;gap:12px;min-height:70px}
@@ -44,9 +44,29 @@ function saveConfig(){let url=val('projectUrl').replace(/\/$/,'');let key=val('p
 async function sgPinLogin(button){
 button.disabled=true;const field=$('sgEmployeePin');const pin=field.value;field.value='';
 try{if(!/^\d{6}$/.test(pin))throw Error('Introduce el PIN de seis cifras.');$('loginError').textContent='Comprobando acceso…';if(!api)connect();let {data,error}=await api.auth.getSession();if(error)throw error;let session=data.session;if(session&&!session.user.is_anonymous)throw Error('Ya existe una sesión con correo. Utiliza tu acceso habitual.');if(!session){const result=await api.auth.signInAnonymously();if(result.error)throw result.error;session=result.data.session;}if(!session)throw Error('No se pudo iniciar la sesión.');const result=await api.functions.invoke('smart-api',{body:{pin},headers:{Authorization:'Bearer '+session.access_token}});if(result.error){let message='';try{const detail=await result.error.context.json();message=detail.mensaje||'';}catch{}throw Error(message||'No se pudo validar el PIN. Comprueba la configuración de Supabase.');}if(!result.data?.ok)throw Error('Acceso no autorizado.');user=session.user;await enter();$('loginError').textContent='';}catch(e){$('loginError').textContent=err(e);}finally{button.disabled=false;}}
-async function sgMagicLink(button){button.disabled=true;try{$("loginError").textContent="Enviando enlace…";if(!api)connect();const email=val("email");if(!email||!$("email").checkValidity())throw Error("Introduce un correo válido.");const {error}=await api.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:"https://sg-corredores.github.io/sg-corredores-app/Index.html"}});if(error)throw error;$("loginError").textContent="Revisa tu correo y abre el enlace de acceso."}catch(e){$("loginError").textContent=err(e)}finally{button.disabled=false}}
+const sgStaffInviteKey='sg10-staff-invite';
+const sgInviteFragment=new URLSearchParams(location.hash.slice(1));
+if(/^[a-f0-9]{64}$/.test(sgInviteFragment.get('sg-invitacion')||'')){
+  localStorage.setItem(sgStaffInviteKey,sgInviteFragment.get('sg-invitacion'));
+  window.history.replaceState(null,'',location.pathname+location.search);
+}
+function sgStaffInviteNotice(){
+  const container=$('loginError');
+  container.textContent='Invitación de empleado. Introduce el correo al que va dirigida.';
+  const reset=document.createElement('button');reset.type='button';reset.textContent='Usar otra cuenta';
+  reset.onclick=async()=>{await api?.auth.signOut({scope:'local'});user=null;sgStaffInviteNotice()};
+  container.append(document.createElement('br'),reset);
+}
+async function sgMagicLink(button){button.disabled=true;try{$("loginError").textContent="Enviando enlace…";if(!api)connect();const email=val("email");if(!email||!$("email").checkValidity())throw Error("Introduce un correo válido.");const {error}=await api.auth.signInWithOtp({email,options:{shouldCreateUser:!!localStorage.getItem(sgStaffInviteKey),emailRedirectTo:"https://sg-corredores.github.io/sg-corredores-app/Index.html"}});if(error)throw error;$("loginError").textContent="Revisa tu correo y abre el enlace de acceso."}catch(e){$("loginError").textContent=err(e)}finally{button.disabled=false}}
 async function signIn(){try{$('loginError').textContent='';if(!api)connect();let email=val('email'),password=$('password').value;if(!email||!password)throw Error('Introduce correo y contraseña.');let {data,error}=await api.auth.signInWithPassword({email,password});if(error)throw error;user=data.user;await enter()}catch(e){$('loginError').textContent=err(e)}}
-async function enter(){let {data,error}=await api.from('sg_members').select('workspace_id,role').eq('user_id',user.id);if(error)throw error;if(!data?.length)throw Error('Este usuario no está registrado como miembro de SG Corredores.');workspace=data[0].workspace_id;role=data[0].role;await sync();$('login').style.display='none';$('app').style.display='block';go('inicio');clearInterval(timer);timer=setInterval(()=>sync(true),12000);setTimeout(()=>aguacatin(true),600)}
+async function enter(){
+ const invitation=localStorage.getItem(sgStaffInviteKey);
+ if(invitation&&!user.is_anonymous){
+   const redeemed=await api.rpc('sg10_redeem_whatsapp_invite',{p_token:invitation,p_customer:false});
+   if(redeemed.error){sgStaffInviteNotice();$('loginError').prepend(redeemed.error.message+' · ');return;}
+   localStorage.removeItem(sgStaffInviteKey);
+ }
+ let {data,error}=await api.from('sg_members').select('workspace_id,role').eq('user_id',user.id);if(error)throw error;if(!data?.length)throw Error('Este usuario no está registrado como miembro de SG Corredores.');workspace=data[0].workspace_id;role=data[0].role;await sync();$('login').style.display='none';$('app').style.display='block';go('inicio');clearInterval(timer);timer=setInterval(()=>sync(true),12000);setTimeout(()=>aguacatin(true),600)}
 async function logout(){clearInterval(timer);if(api)await api.auth.signOut();user=null;workspace=null;records={clients:[],orders:[],purchases:[]};$('app').style.display='none';$('login').style.display='block'}
 async function sync(silent=false){
   if(!api||!workspace||syncing)return;
@@ -160,12 +180,21 @@ function sgExportLoads(){
  const blob=new Blob(['\ufeff'+lines.map(row=>row.map(csvCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Cargas_'+today()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
-function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> ${esc(user?.email||'')}</p><p><b>Rol:</b> ${esc(role||'')}</p><p><b>Espacio:</b> ${esc(workspace||'')}</p><p><b>Última sincronización:</b> ${esc(lastSync?.toLocaleString('es-ES')||'Pendiente')}</p><div class="actions"><button class="primary" onclick="sync()">Sincronizar ahora</button><button class="secondary" onclick="exportData()">Exportar copia JSON</button><button class="danger" onclick="logout()">Cerrar sesión</button></div></div><div class="card"><h2>🥑 Aguacatín</h2><p>Saludos con voz y baile. La voz depende del navegador y no es una imitación exacta de ningún personaje.</p><button class="secondary" onclick="aguacatin()">Saludar</button></div><div class="card"><p class="muted">Sincronización por consulta cada 12 segundos. Los permisos y usuarios se gestionan en Supabase. Las equivalencias de peso fijo se introducen por compra hasta definirlas por producto.</p></div>`}
+function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> ${esc(user?.email||'')}</p><p><b>Rol:</b> ${esc(role||'')}</p><p><b>Espacio:</b> ${esc(workspace||'')}</p><p><b>Última sincronización:</b> ${esc(lastSync?.toLocaleString('es-ES')||'Pendiente')}</p><div class="actions"><button class="primary" onclick="sync()">Sincronizar ahora</button><button class="secondary" onclick="exportData()">Exportar copia JSON</button><button class="danger" onclick="logout()">Cerrar sesión</button></div></div><div class="card"><p class="muted">Sincronización por consulta cada 12 segundos. Los permisos y usuarios se gestionan en Supabase. Las equivalencias de peso fijo se introducen por compra hasta definirlas por producto.</p></div>`}
 function exportData(){let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),workspace,records},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Corredores_'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguacatín al habla! ¡Hoy repartimos frescura!','¡Vamos, equipo! ¡Las sandías no se venden solas!','¡Buenos días! ¡A por una jornada de fruta y verdura!','¡Que hoy salgan las cajas como churros!'];
-function dance(){let a=$('avo');a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
+function dance(){let a=$('avo');if(!a)return;a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
 function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.0;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
-async function init(){ $('projectUrl').value=config.url;$('publicKey').value=config.key;try{connect();const {data,error}=await api.auth.getSession();if(error)throw error;if(data?.session?.user){user=data.session.user;try{await enter();}catch(e){if(!user.is_anonymous)throw e;user=null;workspace=null;$('loginError').textContent='Introduce el PIN de empleado para completar el acceso.';}return}const h=new URLSearchParams(location.hash.slice(1));const q=new URLSearchParams(location.search);if(h.get('error_description')||q.get('error_description'))$('loginError').textContent=h.get('error_description')||q.get('error_description');}catch(e){$('loginError').textContent=err(e)}}init();
+async function init(){
+ const callback=new URL(location.href);
+ const fragment=new URLSearchParams(callback.hash.slice(1));
+ if(localStorage.getItem('sg10-portal-invite')&&!localStorage.getItem(sgStaffInviteKey)
+   && (fragment.has('access_token')||callback.searchParams.has('code'))){
+   const portal=new URL('./portal.html',callback);portal.hash=callback.hash;portal.search=callback.search;
+   location.replace(portal.href);return;
+ }
+ if(localStorage.getItem(sgStaffInviteKey))sgStaffInviteNotice();
+ $('projectUrl').value=config.url;$('publicKey').value=config.key;try{connect();const {data,error}=await api.auth.getSession();if(error)throw error;if(data?.session?.user){user=data.session.user;try{await enter();}catch(e){if(!user.is_anonymous)throw e;user=null;workspace=null;$('loginError').textContent='Introduce el PIN de empleado para completar el acceso.';}return}const h=new URLSearchParams(location.hash.slice(1));const q=new URLSearchParams(location.search);if(h.get('error_description')||q.get('error_description'))$('loginError').textContent=h.get('error_description')||q.get('error_description');}catch(e){$('loginError').textContent=err(e)}}init();
 </script>
 <div id="aguModal" role="dialog" aria-modal="true"><div id="aguPanel">
 <div style="display:flex;justify-content:space-between;align-items:center"><b>🥑 Aguacatín</b><button onclick="closeAgu()">✕ Cerrar</button></div>
@@ -219,9 +248,9 @@ const n=document.getElementById('nav');n.innerHTML=`<button onclick="sgGo('inici
 </script>
 
 <div id="aguFloat" aria-label="Asistente Aguacatín" style="display:none">
-  <button id="aguAvatar" type="button" onclick="openAgu()" aria-label="Hablar con Aguacatín"><img alt="Aguacatín" src="./sg10/aguacatin.png"></button>
+  <button id="aguAvatar" type="button" onclick="openAgu()" aria-label="Hablar con Aguacatín" aria-describedby="aguCloseHint"><img alt="Aguacatín" src="./sg10/aguacatin.png"></button>
   <div id="aguControls" hidden>
-    <button class="aguClose" type="button" onclick="closeAgu()" aria-label="Cerrar Aguacatín">×</button>
+    <span id="aguCloseHint" hidden>Mantén pulsado el personaje dos segundos para cerrar, o pulsa Escape.</span>
     <div id="aguBubble" role="status" aria-live="polite">¡Aquí estoy! Tócame para hablar.</div>
     <div id="aguWave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <div id="aguEntry"><input id="aguFloatInput" placeholder="Escribe a Aguacatín..." aria-label="Mensaje para Aguacatín" onkeydown="if(event.key==='Enter')aguSend()"><button type="button" onclick="aguSend()" aria-label="Enviar">➤</button><button type="button" onclick="aguListen()" aria-label="Activar micrófono">🎙</button></div>
@@ -274,7 +303,7 @@ window.aguSend=async function(){
 <script id="agu-drag-fix-v2-js">
 (function(){'use strict';
 const flo=document.getElementById('aguFloat'),av=document.getElementById('aguAvatar');if(!flo||!av)return;
-const key='sg_aguacatin_position_v3';let down=null,holding=false,moved=false,timer=null,blockClick=false;
+const key='sg_aguacatin_position_v3';let down=null,holding=false,timer=null,blockClick=false;
 function bound(n,min,max){return Math.min(Math.max(n,min),Math.max(min,max))}
 function locate(x,y){if(flo.classList.contains('aguExpanded'))return;const w=av.offsetWidth||75,h=av.offsetHeight||104;const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
  flo.style.left=bound(x,8,vw-w-8)+'px';
@@ -284,21 +313,47 @@ function locate(x,y){if(flo.classList.contains('aguExpanded'))return;const w=av.
 function save(){const r=flo.getBoundingClientRect();try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(e){}}
 function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging')}
 try{const v=JSON.parse(localStorage.getItem(key));if(v&&Number.isFinite(v.x)&&Number.isFinite(v.y))requestAnimationFrame(()=>locate(v.x,v.y))}catch(e){}
-av.addEventListener('pointerdown',e=>{if(flo.classList.contains('aguExpanded')||(e.pointerType==='mouse'&&e.button!==0))return;
- const r=flo.getBoundingClientRect();down={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top};holding=false;moved=false;
- try{av.setPointerCapture(e.pointerId)}catch(err){}
- clearTimeout(timer);timer=setTimeout(()=>{if(down){holding=true;blockClick=true;flo.classList.add('aguDragging');if(navigator.vibrate)navigator.vibrate(25)}},300);
+av.addEventListener('contextmenu',e=>e.preventDefault());
+av.addEventListener('pointerdown',e=>{
+ if(down||e.button!==0)return;
+ blockClick=false;
+ const r=flo.getBoundingClientRect(),expanded=flo.classList.contains('aguExpanded');
+ down={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,expanded};
+ try{av.setPointerCapture(e.pointerId)}catch{}
+ timer=setTimeout(()=>{
+  if(!down||flo.classList.contains('aguExpanded')!==expanded)return;
+  blockClick=true;
+  if(expanded){window.closeAgu();return;}
+  holding=true;
+  flo.classList.add('aguDragging');
+  navigator.vibrate?.(25);
+ },expanded?2000:300);
 },{capture:true});
-av.addEventListener('pointermove',e=>{if(flo.classList.contains('aguExpanded')||!down||e.pointerId!==down.id)return;
+av.addEventListener('pointermove',e=>{
+ if(!down||e.pointerId!==down.id)return;
  const dx=e.clientX-down.x,dy=e.clientY-down.y;
- if(!holding){if(Math.hypot(dx,dy)>14){clearTimeout(timer);timer=null}return}
- e.preventDefault();moved=true;locate(down.left+dx,down.top+dy);
+ if(!holding){if(Math.hypot(dx,dy)>14){clearTimeout(timer);blockClick=true}return}
+ if(flo.classList.contains('aguExpanded'))return;
+ e.preventDefault();locate(down.left+dx,down.top+dy);
 },{passive:false,capture:true});
-function end(e){if(!down||e.pointerId!==down.id)return;const wasHold=holding;
- if(wasHold){e.preventDefault();save();blockClick=true;setTimeout(()=>{blockClick=false},600)}
- release();}
-av.addEventListener('pointerup',end,{capture:true});av.addEventListener('pointercancel',end,{capture:true});
-av.addEventListener('click',e=>{if(blockClick){e.preventDefault();e.stopImmediatePropagation();blockClick=false}},{capture:true});
+function end(e){
+ if(!down||e.pointerId!==down.id)return;
+ if(holding)save();
+ release();
+}
+av.addEventListener('pointerup',end,{capture:true});
+av.addEventListener('pointercancel',end,{capture:true});
+av.addEventListener('lostpointercapture',end,{capture:true});
+window.addEventListener('blur',release);
+av.addEventListener('click',e=>{
+ if(blockClick&&e.detail!==0){e.preventDefault();e.stopImmediatePropagation();blockClick=false}
+},{capture:true});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&flo.classList.contains('aguExpanded')){
+  window.closeAgu();
+  av.focus({preventScroll:true});
+ }
+});
 function clampPosition(){if(!flo.classList.contains('aguExpanded')&&flo.style.left){locate(parseFloat(flo.style.left)||0,parseFloat(flo.style.top)||0)}}
 window.addEventListener('resize',clampPosition);window.visualViewport?.addEventListener('resize',clampPosition);new MutationObserver(clampPosition).observe(flo,{attributes:true,attributeFilter:['class']});
 })();
@@ -656,7 +711,13 @@ if(!bubble||!controls)return;
 document.getElementById('sgVoicePanel')?.remove();
 const panel=document.createElement('div');panel.id='sgVoicePanel';
 panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz natural activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="cheerful">🥑 Aguacatín alegre</option><option value="natural">Natural</option></select>';
-controls.appendChild(panel);
+const settingsContent=document.getElementById('content');
+function mountVoiceSettings(){
+ const slot=document.getElementById('sgAguVoiceSettings');
+ if(slot&&panel.parentElement!==slot)slot.appendChild(panel);
+}
+new MutationObserver(mountVoiceSettings).observe(settingsContent,{childList:true});
+mountVoiceSettings();
 const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),style=panel.querySelector('#sgVoiceVoice');
 let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',last='',serial=0,audio=null,objectUrl=null;
 function refresh(){toggle.textContent=enabled?'🔊 Voz natural activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
@@ -775,7 +836,7 @@ r.onend=()=>{if(rec!==r)return;rec=null;floating.classList.remove('aguListening'
 window.sgConversationPause=pause;window.sgConversationResume=resume;window.sgConversationStop=stop;
 window.aguListen=()=>{if(active){window.sgVoiceInterrupt?.();pause();resume();return;}active=true;failures=0;button.hidden=false;listen();};
 window.openAgu=()=>{floating.classList.add('aguExpanded');document.getElementById('aguControls').hidden=false;if(!active)window.aguListen();};
-window.closeAgu=()=>{stop();document.getElementById('sgVoiceStop')?.click();close?.();};button.onclick=()=>{stop();document.getElementById('sgVoiceStop')?.click();};document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+window.closeAgu=()=>{stop();window.sgVoiceInterrupt?.();close?.();};button.onclick=()=>{stop();window.sgVoiceInterrupt?.();};document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
 })();
 </script><script id="sg-agent-8">(()=>{
 let pending=null,busy=false;
@@ -832,8 +893,8 @@ async function buy(id){if(busy)return;const r=get('orders',id),x=d(r),left=remai
 const nav=$('nav'),b=document.createElement('button');b.textContent='Mi compra';b.onclick=()=>go('micompra');nav.append(b);render=function(){if(page==='micompra'){if(scope===key())draw();else $('content').innerHTML='<div class="card">Cargando mi lista…</div>';load();return}old();if(page==='pedidos'||page==='hoja'){decorate();load()}};
 })();</script><style id="sg-responsive-assistant">
 html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-width:100%}#nav{overflow-x:auto}
-#aguFloat:not(.aguExpanded){width:75px;max-width:75px;align-items:center;transform:none}
-#aguFloat:not(.aguExpanded) #aguAvatar{width:75px;height:104px;flex:none;transition:none}
+#aguFloat:not(.aguExpanded){width:83px;max-width:83px;align-items:center;transform:none}
+#aguFloat:not(.aguExpanded) #aguAvatar{width:83px;height:114px;flex:none;transition:none}
 #aguFloat.aguExpanded{position:fixed!important;inset:auto!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(360px,calc(100vw - 24px))!important;max-width:calc(100vw - 24px)!important;height:auto!important;max-height:85dvh!important;box-sizing:border-box!important;padding:12px!important;align-items:center!important;justify-content:flex-start!important;overflow:visible!important;z-index:1000!important;background:transparent!important;pointer-events:none!important;gap:6px}
 #aguFloat.aguExpanded #aguAvatar{flex:0 0 auto!important;width:130px!important;height:min(175px,25dvh)!important;margin:0 auto!important}
 #aguFloat.aguExpanded #aguControls{position:relative!important;inset:auto!important;transform:none!important;width:100%!important;max-width:420px!important;min-width:0!important;box-sizing:border-box!important;align-items:stretch!important;margin:0 auto!important;flex:0 1 auto!important;pointer-events:none!important;max-height:55dvh;overflow-y:auto}
@@ -843,9 +904,7 @@ html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-widt
 #aguFloat.aguExpanded #aguEntry button{flex:0 0 36px!important}
 #aguFloat.aguExpanded #aguBubble{overflow-wrap:anywhere}
 #aguFloat.aguExpanded #aguWave{margin:0 auto}
-#aguFloat.aguExpanded .aguClose{align-self:flex-end}
-#aguFloat.aguExpanded #sgVoicePanel{width:100%;flex-wrap:wrap!important}
-#aguFloat.aguExpanded #aguControls button,#aguFloat.aguExpanded #aguControls input,#aguFloat.aguExpanded #aguControls select,#aguFloat.aguExpanded #aguEntry,#aguFloat.aguExpanded #aguBubble{pointer-events:auto!important}#aguFloat.aguExpanded #aguAvatar{pointer-events:auto!important;width:100px!important;height:135px!important}#aguFloat.aguExpanded #aguBubble{max-height:22dvh;overflow:auto}#aguFloat.aguExpanded #sgVoicePanel{background:#edf8ef;border-radius:12px}
+#aguFloat.aguExpanded #aguControls button,#aguFloat.aguExpanded #aguControls input,#aguFloat.aguExpanded #aguControls select,#aguFloat.aguExpanded #aguEntry,#aguFloat.aguExpanded #aguBubble{pointer-events:auto!important}#aguFloat.aguExpanded #aguAvatar{pointer-events:auto!important;width:118px!important;height:min(155px,28dvh)!important}#aguFloat.aguExpanded #aguBubble{max-height:22dvh;overflow:auto}
 </style><script>
 (()=>{const f=document.getElementById('aguFloat');if(f&&f.parentElement!==document.body)document.body.appendChild(f);})();
 </script><style>#sgBackBar{position:sticky;top:0;z-index:25;background:#f1f8f3;padding:6px 12px;border-bottom:1px solid #d4e5da}#sgBackBtn{background:#fff;color:#123b27;border:1px solid #bdd4c5;border-radius:10px;padding:8px 14px;font-weight:700;font-size:15px}#sgBackBtn:disabled{opacity:.45}</style><script>
@@ -855,7 +914,7 @@ html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-widt
 </script><script>
 (()=>{
 const old=settings;
-settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<div class="card"><h2>Gestión de empleados</h2><p>Invita a un empleado por correo electrónico. Tendrá acceso como empleado, no como propietario.</p><form onsubmit="sgInviteEmployee(event)"><label>Correo electrónico<input id="sgInviteEmail" type="email" required autocomplete="off" maxlength="254" placeholder="empleado@correo.com"></label><button type="submit" class="primary">Invitar empleado</button></form><p id="sgInviteStatus" role="status" aria-live="polite"></p></div>`:'')};
+settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<div class="card"><h2>Gestión de empleados</h2><p>Invita a un empleado por correo o WhatsApp.</p><form onsubmit="sgInviteEmployee(event)"><label>Correo electrónico<input id="sgInviteEmail" type="email" required autocomplete="off" maxlength="254" placeholder="empleado@correo.com"></label><button type="submit" class="primary">Invitar por correo</button> <button type="button" class="secondary" onclick="sg10InviteStaffWhatsApp(this)">Invitar por WhatsApp</button></form><p id="sgInviteStatus" role="status" aria-live="polite"></p></div>`:'')};
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
