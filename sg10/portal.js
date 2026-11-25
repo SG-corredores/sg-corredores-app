@@ -1,3 +1,4 @@
+import { installAguacatin } from "./portal-aguacatin.js";
 import { installCarousel } from "./portal-carousel.js";
 import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js?v=whatsapp-directo";
 
@@ -43,7 +44,7 @@ if (invitation?.token) status("Invitación de cliente. Introduce el correo al qu
 let user, membership, memberships = [], inbox, request, gallery = [], galleryVersion = 0, refreshVersion = 0;
 let gallerySignature = "";
 let lineCounter = 0;
-let history = [];
+let assistantContext = {history:[], busy:false};
 const selected = () => membership ? { workspace: membership.workspace_id, company: membership.client_id } : null;
 const priorDate = (days) => {
   const date = new Date(madridDate() + "T12:00:00Z");
@@ -241,24 +242,37 @@ if (!previewMode) element("order-form").onsubmit = async (event) => {
   } catch (error) { orderStatus(error.message); }
   finally { submit.disabled = false; }
 };
+async function askAguacatin(text) {
+  const scope = selected();
+  const context = assistantContext;
+  if (previewMode || !scope) return;
+  if (context.busy) throw Error("Espera a que termine la consulta en curso.");
+  context.busy = true;
+  try {
+    const result = await invoke(api,"sg10-aguacatin",{...scope,mode:"consulta",text,history:context.history});
+    if (context !== assistantContext) return;
+    context.history = [...context.history,{role:"user",content:text},{role:"assistant",content:result.respuesta}].slice(-6);
+    return result.respuesta;
+  } finally { context.busy = false; }
+}
+const resetFloatingAguacatin = installAguacatin(previewMode,askAguacatin);
 if (!previewMode) element("assistant-form").onsubmit = async (event) => {
   event.preventDefault();
-  const scope = selected();
-  if (!scope) return;
-  const field = element("question");
-  const answer = element("assistant-answer");
-  const text = field.value.trim();
-  const button = event.submitter;
+  const context = assistantContext;
+  const text = element("question").value.trim();
   if (!text) return;
+  const button = event.currentTarget.querySelector("button");
+  const answer = element("assistant-answer");
   button.disabled = true;
   answer.textContent = "Consultando…";
   try {
-    const result = await invoke(api,"sg10-aguacatin",{...scope,mode:"consulta",text,history});
-    if (selected()?.company !== scope.company || selected()?.workspace !== scope.workspace) return;
-    answer.textContent = result.respuesta;
-    history = [...history,{role:"user",content:text},{role:"assistant",content:result.respuesta}].slice(-6);
-  } catch (error) { answer.textContent = error.message; }
-  finally { button.disabled = false; }
+    const response = await askAguacatin(text);
+    if (context === assistantContext) answer.textContent = response;
+  } catch (error) {
+    if (context === assistantContext) answer.textContent = error.message;
+  } finally {
+    if (context === assistantContext) button.disabled = false;
+  }
 };
 if (previewMode) {
   element("pedidos").innerHTML = '<h2>Pedidos</h2><p>Desde aquí, el cliente puede escribir o dictar un pedido.</p><a href="#history">Consultar pedidos existentes</a>';
@@ -267,7 +281,10 @@ if (previewMode) {
 async function openCompany(index) {
   inbox?.close();
   membership = memberships[index];
-  history = [];
+  assistantContext = {history:[], busy:false};
+  resetFloatingAguacatin();
+  element("question").value = "";
+  element("assistant-form").querySelector("button").disabled = false;
   request = null;
   element("company-name").textContent = "Mi empresa";
   element("history-list").replaceChildren();
@@ -389,7 +406,7 @@ if (directToken) {
       await redeemDirectInvite(api,directToken,true);
       localStorage.removeItem("sg10-portal-invite");
       await connect();
-      history.replaceState(null,"",location.pathname + location.search);
+      window.history.replaceState(null,"",location.pathname + location.search);
       status("");
     } catch (error) {
       status(error.message);

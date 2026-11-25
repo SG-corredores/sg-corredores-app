@@ -8,9 +8,9 @@
   <link rel="icon" href="./icon-192.png">
   <link rel="manifest" href="./portal.webmanifest">
   <link rel="stylesheet" href="./sg10/ui.css">
-  <link rel="stylesheet" href="./sg10/portal.css?v=cabecera-cliente">
+  <link rel="stylesheet" href="./sg10/portal.css?v=aguacatin">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
-  <script type="module" src="./sg10/portal.js?v=galeria-ampliada"></script>
+  <script type="module" src="./sg10/portal.js?v=aguacatin"></script>
 </head>
 <body>
 <header>
@@ -108,6 +108,20 @@
       <form id="assistant-form"><label>Consulta sobre tu empresa <input id="question" required maxlength="500" placeholder="¿Qué se ha comprado hoy?"></label><button>Consultar</button></form>
       <p id="assistant-answer" role="status"></p>
     </section>
+    <div id="portal-aguacatin">
+      <button id="portal-agu-avatar" type="button" aria-label="Abrir Aguacatín" aria-expanded="false" aria-controls="portal-agu-controls">
+        <img src="./sg10/aguacatin.png" alt="" width="83" height="114" draggable="false">
+      </button>
+      <div id="portal-agu-controls" hidden>
+        <p id="portal-agu-answer" role="status"></p>
+        <div id="portal-agu-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <form id="portal-agu-form">
+          <input id="portal-agu-question" aria-label="Mensaje para Aguacatín" maxlength="500" placeholder="Escribe a Aguacatín…" required>
+          <button type="submit" aria-label="Enviar">➤</button>
+          <button id="portal-agu-mic" type="button" aria-label="Activar micrófono" aria-pressed="false">🎙</button>
+        </form>
+      </div>
+    </div>
     <footer>SG Corredores · <span id="version"></span></footer>
   </section>
 </main>

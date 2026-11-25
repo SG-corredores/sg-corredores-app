@@ -203,3 +203,87 @@ footer { text-align: center; margin: 1.3rem 0; color: var(--muted); font-size: .
 .portal-tile small { margin-top:.3rem; color:var(--muted); line-height:1.25; }
 #portal-back { display:inline-flex; align-items:center; min-height:44px; margin:.7rem 0 0; color:var(--forest); font-weight:700; }
 @media (min-width:850px) { .portal-tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+#portal-aguacatin {
+  position: fixed;
+  z-index: 40;
+  right: 12px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+#portal-aguacatin.is-open {
+  z-index: 60;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 12px;
+}
+#portal-agu-avatar {
+  display: block;
+  width: 83px;
+  height: 114px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 5px #102c1f66);
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  pointer-events: auto;
+  cursor: grab;
+}
+#portal-agu-avatar:hover:not(:disabled) { background: transparent; }
+#portal-agu-avatar img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+#portal-aguacatin.is-open #portal-agu-avatar {
+  width: 118px;
+  height: min(155px, 28dvh);
+  animation: portal-agu-bob 1.2s ease-in-out infinite alternate;
+  cursor: pointer;
+}
+#portal-aguacatin.is-listening #portal-agu-avatar { filter: drop-shadow(0 0 12px #20d977); }
+@keyframes portal-agu-bob { to { transform: translateY(-7px) rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #portal-aguacatin.is-open #portal-agu-avatar { animation: none; }
+}
+#portal-agu-controls { width: min(350px, 100%); }
+#portal-agu-answer {
+  margin: 0 0 7px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: #086b36;
+  color: white;
+  box-shadow: 0 4px 15px #153c2b33;
+  font-size: .9rem;
+  max-height: 28dvh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  pointer-events: auto;
+}
+#portal-agu-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: white;
+  border: 1px solid #b3e5c5;
+  border-radius: 28px;
+  box-shadow: 0 5px 20px #153c2b33;
+  pointer-events: auto;
+}
+#portal-agu-question { flex: 1; min-width: 0; border: 0; border-radius: 20px; padding: 8px; font-size: 1rem; }
+#portal-agu-form button { flex: 0 0 40px; height: 40px; padding: 0; border-radius: 50%; }
+
+#portal-agu-wave { display: none; align-items: center; justify-content: center; gap: 3px; height: 23px; margin-bottom: 7px; }
+#portal-aguacatin.is-listening #portal-agu-wave { display: flex; }
+#portal-agu-wave i { width: 4px; height: 8px; border-radius: 4px; background: #1bd66b; }
+@media (prefers-reduced-motion: no-preference) {
+  #portal-agu-wave i { animation: portal-agu-wave .65s infinite alternate; }
+  #portal-agu-wave i:nth-child(2n) { animation-delay: .13s; }
+  #portal-agu-wave i:nth-child(3) { animation-delay: .24s; }
+}
+@keyframes portal-agu-wave { to { height: 23px; } }
