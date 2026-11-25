@@ -62,7 +62,8 @@ async function refresh() {
   const from_date = element("from-date").value;
   const to_date = element("to-date").value;
   const { workspace:space, company } = selected();
-  const { data, error } = await api.rpc(previewMembership ? "sg10_admin_portal_snapshot" : "sg10_portal_snapshot", { space, company, from_date, to_date });
+  const period = { space, company, from_date, to_date };
+  const { data, error } = await api.rpc(previewMembership ? "sg10_admin_portal_snapshot" : "sg10_portal_snapshot",period);
   if (number !== refreshVersion) return;
   if (error || !data) throw error ?? Error("Esta empresa no está disponible.");
   element("company-name").textContent = data.company;
@@ -73,6 +74,26 @@ async function refresh() {
   element("invoice-list").innerHTML = data.invoices.map(row =>
     '<div class="row"><b>' + esc(row.number) + '</b> · ' + esc(row.supplier) + ' <small>' + esc(row.date)
     + ' · ' + esc(row.total == null ? "Importe pendiente" : row.total + " €") + '</small></div>').join("") || "<p>Sin facturas autorizadas en este periodo.</p>";
+  void loadCommissions(period,number);
+}
+const euro = new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+const kg = new Intl.NumberFormat("es-ES",{maximumFractionDigits:3});
+const shortDate = (date) => date.split("-").reverse().join("/");
+async function loadCommissions(period,revision) {
+  const section = element("commission-list");
+  try {
+    const {data,error} = await api.rpc("sg10_portal_commissions",period);
+    if (revision !== refreshVersion) return;
+    if (error) throw error;
+    section.innerHTML = data.map(row => {
+      const dates = shortDate(row.date_from) + (row.date_to === row.date_from ? "" : " – " + shortDate(row.date_to));
+      return '<div class="portal-commission"><div><b>' + esc(dates) + '</b><small>'
+        + (row.weight == null ? 'Informe enviado' : esc(kg.format(row.weight)) + ' kg cargados')
+        + '</small></div>' + (row.total == null ? '' : '<strong>' + esc(euro.format(row.total)) + '</strong>') + '</div>';
+    }).join("") || "<p>No hay comisiones publicadas en el periodo seleccionado en Historial.</p>";
+  } catch {
+    if (revision === refreshVersion) section.textContent = "No se pudieron cargar las comisiones.";
+  }
 }
 function record(row, quantity, unit) {
   return '<div class="row ' + (row.status === "Pendiente" ? "sg10-pending" : /Comprado|Cargado|Preparado/.test(row.status) ? "sg10-done" : "")
@@ -96,16 +117,25 @@ async function loadGallery() {
   }));
   if (revision !== galleryVersion) return;
   gallery = loaded;
-  element("gallery-list").innerHTML = gallery.map(row => '<article><button type="button" data-photo="' + esc(row.id)
-      + '">' + (row.url ? '<img alt="" loading="lazy" src="' + esc(row.url) + '">' : '') + '<strong>' + esc(row.product)
-      + '</strong>' + esc(row.price == null ? "" : row.price + " €/" + row.unit) + '</button></article>').join("") || "<p>Sin fotografías publicadas.</p>";
+  element("gallery-list").innerHTML = gallery.map(row => {
+    const name = row.product?.trim();
+    return '<article><button type="button" data-photo="' + esc(row.id) + '" aria-label="' + esc(name || "Ver fotografía")
+      + '">' + (row.url ? '<img alt="" loading="lazy" src="' + esc(row.url) + '">' : '')
+      + (name ? '<strong>' + esc(name) + '</strong>' : '')
+      + (row.price == null ? '' : '<small>' + esc(row.price + " €/" + row.unit) + '</small>') + '</button></article>';
+  }).join("") || "<p>Sin fotografías publicadas.</p>";
 }
 element("gallery-list").onclick = ({target}) => {
   const row = gallery.find(row => row.id === target.closest("button")?.dataset.photo);
   if (!row) return;
-  element("photo-content").innerHTML = (row.url ? '<img src="' + esc(row.url) + '" alt="' + esc(row.product) + '">' : '')
-    + '<h2>' + esc(row.product) + '</h2><p>' + esc(row.description) + '</p><p>' + esc(row.price == null ? "" : row.price + " €/" + row.unit)
-    + (previewMembership ? "</p>" : '</p><button type="button">Pedir este producto</button>');
+  const name = row.product?.trim();
+  const dialog = element("photo");
+  dialog.setAttribute("aria-label",name || "Fotografía");
+  element("photo-content").innerHTML = (row.url ? '<img src="' + esc(row.url) + '" alt="' + esc(name || "Fotografía") + '">' : '')
+    + (name ? '<h2>' + esc(name) + '</h2>' : '')
+    + (row.description ? '<p>' + esc(row.description) + '</p>' : '')
+    + (row.price == null ? '' : '<p>' + esc(row.price + " €/" + row.unit) + '</p>')
+    + (!previewMode && name ? '<button type="button">Pedir este producto</button>' : '');
   const orderButton = element("photo-content").querySelector("button");
   if (orderButton) orderButton.onclick = () => {
     const blank = [...element("lines").querySelectorAll("fieldset")].find(row => !row.querySelector('[name="product"]').value);
@@ -204,6 +234,7 @@ if (!previewMode) element("assistant-form").onsubmit = async (event) => {
   finally { button.disabled = false; }
 };
 if (previewMode) {
+  element("portal-order-link").remove();
   element("pedidos").remove();
   element("assistant-section").remove();
 }
@@ -215,6 +246,7 @@ async function openCompany(index) {
   element("company-name").textContent = "Mi empresa";
   element("history-list").replaceChildren();
   element("invoice-list").replaceChildren();
+  element("commission-list").replaceChildren();
   element("gallery-list").replaceChildren();
   element("assistant-answer").replaceChildren();
   inbox = attachInbox({

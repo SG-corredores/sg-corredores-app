@@ -98,13 +98,29 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     galleryRows = result.data;
     const list = document.getElementById("sg10GalleryList");
     if (!list) return;
-    list.innerHTML = galleryRows.map(row => '<div class="item" data-item="' + esc(row.id) + '"><b>' + esc(row.product)
-      + '</b><p>' + esc(row.description) + ' · ' + esc(row.price == null ? "Sin precio" : formatting.format(row.price) + "/" + row.unit)
-      + '</p><p>' + esc(row.client_id ? state().records.clients.find(c => c.id === row.client_id)?.data.name : "Todos los clientes")
-      + '</p><button onclick="sg10Ops(\'editPhoto\',this.closest(\'[data-item]\').dataset.item)">Editar</button> '
-      + '<button class="danger" onclick="sg10Ops(\'removePhoto\',this.closest(\'[data-item]\').dataset.item)">Eliminar</button></div>').join("")
-      || "<p>Sin publicaciones.</p>";
+    list.innerHTML = galleryRows.map(row => {
+      const label = row.product || "Fotografía";
+      const details = [row.description, row.price == null ? "" : formatting.format(row.price) + "/" + row.unit].filter(Boolean);
+      const audience = row.client_id ? state().records.clients.find(c => c.id === row.client_id)?.data.name : "Todos los clientes";
+      return '<div class="item" data-item="' + esc(row.id) + '"><div class="sg10-gallery-entry">'
+        + '<img class="sg10-poster" hidden loading="lazy" alt="' + esc(label) + '"><div><b>' + esc(label)
+        + '</b>' + (details.length ? '<p>' + esc(details.join(" · ")) + '</p>' : '') + '<p>' + esc(audience) + '</p></div></div>'
+        + '<button onclick="sg10Ops(\'editPhoto\',this.closest(\'[data-item]\').dataset.item)">Editar</button> '
+        + '<button class="danger" onclick="sg10Ops(\'removePhoto\',this.closest(\'[data-item]\').dataset.item)">Eliminar</button></div>';
+    }).join("") || "<p>Sin publicaciones.</p>";
     if (target) list.querySelector('[data-item="' + CSS.escape(target) + '"]')?.classList.add("sg10-highlight");
+    const paths = new Set(result.data.map(row => row.image_path));
+    if (!paths.size) return;
+    const signed = await api.storage.from("sg10-productos").createSignedUrls([...paths], 300);
+    if (context !== scope() || !list.isConnected || galleryRows !== result.data || signed.error) return;
+    const urls = new Map(signed.data.map(item => [item.path, item.signedUrl]));
+    for (const row of result.data) {
+      const source = urls.get(row.image_path);
+      const image = list.querySelector('[data-item="' + CSS.escape(row.id) + '"] img');
+      if (!image || !source) continue;
+      image.src = source;
+      image.hidden = false;
+    }
   }
 
   function galleryView() {
@@ -117,14 +133,14 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const dialog = openDialog(existing ? "Editar publicación" : "Publicar fotografía");
     const content = dialog.querySelector("[data-content]");
     const clientOptions = renderOptions(state().records.clients,existing?.client_id);
-    content.innerHTML = '<form><label>Producto <input name="product" required maxlength="120" value="' + esc(existing?.product)
-      + '"></label><label>Descripción y observaciones <textarea name="description" maxlength="1000">' + esc(existing?.description)
+    content.innerHTML = '<form><label>Foto JPEG, PNG o WebP <input name="image" type="file" accept="image/jpeg,image/png,image/webp" '
+      + (!existing ? "required" : "") + '></label><label>Producto (opcional) <input name="product" maxlength="120" value="' + esc(existing?.product)
+      + '"></label><label>Descripción y observaciones (opcional) <textarea name="description" maxlength="1000">' + esc(existing?.description)
       + '</textarea></label><label>Precio opcional <input name="price" inputmode="decimal" value="' + esc(existing?.price)
       + '"></label><label>Unidad <select name="unit"><option value="">Seleccionar</option><option>kg</option><option>caja</option><option>palé</option><option>unidad</option></select></label>'
       + '<label>Visibilidad <select name="clients"' + (existing ? '' : ' multiple size="4"') + '><option value=""'
       + (!existing?.client_id ? ' selected' : '') + '>Todos los clientes</option>' + clientOptions
-      + '</select></label><label>Foto JPEG, PNG o WebP <input name="image" type="file" accept="image/jpeg,image/png,image/webp" '
-      + (!existing ? "required" : "") + '></label><button>Guardar publicación</button><p role="status"></p></form>';
+      + '</select></label><button>' + (existing ? 'Guardar cambios' : 'Publicar foto') + '</button><p role="status"></p></form>';
     const form = content.querySelector("form");
     form.elements.unit.value = existing?.unit ?? "";
     const started = scope();
@@ -140,8 +156,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       const selected = [...form.elements.clients.selectedOptions].map(option => option.value);
       const companyIds = selected.includes("") || !selected.length ? [null] : selected;
       const feedback = form.querySelector("[role=status]");
-      if ((raw && (!Number.isFinite(price) || !unit || !/^\d+(?:[.,]\d{1,2})?$/.test(raw))) || !get("product")) {
-        return feedback.textContent = "Revisa nombre, precio y unidad.";
+      if (raw && (!Number.isFinite(price) || !unit || !/^\d+(?:[.,]\d{1,2})?$/.test(raw))) {
+        return feedback.textContent = "Revisa el precio y elige una unidad.";
       }
       if (file && (file.size>5_242_880 || !["image/webp","image/jpeg","image/png"].includes(file.type))) {
         return feedback.textContent = "Selecciona una fotografía JPEG, PNG o WebP de hasta 5 MB.";
@@ -824,8 +840,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     if(!panel)return;
     const key=commissionKey,[client,start,end]=JSON.parse(key);
     const {api,workspace,records}=state();
-    const source=records.purchases.filter(row=>row.data.clientId===client&&row.data.date>=start&&row.data.date<=end&&row.data.status==="Cargado")
-      .map(row=>[row.id,row.updated_at]).sort((a,b)=>a[0].localeCompare(b[0]));
+    const loaded=records.purchases.filter(row=>row.data.clientId===client&&row.data.date>=start&&row.data.date<=end&&row.data.status==="Cargado");
+    const source=loaded.map(row=>[row.id,row.updated_at]).sort((a,b)=>a[0].localeCompare(b[0]));
     if(!source.length){panel.textContent="No hay cargas confirmadas para revisar.";return;}
     const basis=records.clients.find(row=>row.id===client)?.data.sg10Rules??[];
     const fingerprint=await digest(JSON.stringify([basis,source]));
@@ -838,11 +854,13 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     if(!roleOwner())return;
     for(const next of (status==="revisada"?["pendiente","enviada"]:status==="enviada"?["pendiente"]:["pendiente","revisada"])){
       const button=document.createElement("button");
-      button.textContent={pendiente:"Preparar para revisión",revisada:"Confirmar revisión",enviada:"Registrar como enviada"}[next];
+      button.textContent={pendiente:"Preparar para revisión",revisada:"Confirmar revisión",enviada:"Publicar en Zona Clientes"}[next];
       button.onclick=async()=>{
-        if(next==="enviada"&&!confirm("¿Confirmas que ya has enviado el informe a este cliente?"))return;
+        if(next==="enviada"&&!confirm("¿Publicar los kilos y la comisión de este periodo en la Zona Clientes de esta empresa?"))return;
         button.disabled=true;
         const row={workspace_id:workspace,client_id:client,date_from:start,date_to:end,fingerprint,status:next,
+          published_kg:next==="enviada"?loaded.reduce((total,row)=>total+kilos(row.data),0):null,
+          published_total:next==="enviada"?loaded.reduce((total,row)=>total+commission(row.data),0):null,
           updated_by:state().user.id,updated_at:new Date().toISOString()};
         const result=data
           ? await api.from("sg10_commission_reviews").update(row).eq("workspace_id",workspace).eq("client_id",client)

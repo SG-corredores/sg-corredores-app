@@ -25,7 +25,7 @@
 </header>
 <main>
   <section class="panel" id="admin-preview" hidden><strong>Vista de administrador · Solo lectura</strong> <a href="./Index.html">Volver a SG Corredores</a></section>
-  <section class="panel" id="login">
+  <section class="panel portal-login" id="login">
     <h1>Accede a tu empresa</h1>
     <form id="login-form">
       <label>Correo electrónico <input type="email" id="email" required autocomplete="email"></label>
@@ -36,8 +36,15 @@
   <p id="status" role="status" aria-live="polite"></p>
   <section id="portal" hidden>
     <section id="inbox" class="sg10-inbox" hidden aria-label="Avisos"></section>
+    <div class="portal-welcome">
+      <h1 id="company-name">Mi empresa</h1>
+      <label id="spaces-label" hidden>Empresa <select id="spaces"></select></label>
+    </div>
+    <nav class="portal-nav" aria-label="Secciones de Zona Clientes">
+      <a href="#galeria">Productos</a><a href="#pedidos" id="portal-order-link">Pedido</a>
+      <a href="#history">Historial</a><a href="#facturas">Facturas</a><a href="#comisiones">Comisiones</a>
+    </nav>
     <section class="panel" id="galeria">
-      <div class="company-heading"><h1 id="company-name">Mi empresa</h1><label id="spaces-label" hidden>Empresa <select id="spaces"></select></label></div>
       <h2>Productos disponibles</h2>
       <div class="sg10-galleryrow" id="gallery-list" tabindex="0" aria-label="Fotos de productos"></div>
     </section>
@@ -66,8 +73,12 @@
       <div id="history-list"></div>
     </section>
     <section class="panel" id="facturas"><h2>Facturas autorizadas</h2><div id="invoice-list"></div></section>
+    <section class="panel" id="comisiones">
+      <h2>Comisiones</h2>
+      <div id="commission-list"></div>
+    </section>
     <section class="panel" id="assistant-section">
-      <h2>Preguntar a Aguacatín</h2>
+      <div class="portal-assistant-heading"><img src="./sg10/aguacatin.png" alt="" width="44" height="55"><h2>Preguntar a Aguacatín</h2></div>
       <form id="assistant-form"><label>Consulta sobre tu empresa <input id="question" required maxlength="500" placeholder="¿Qué se ha comprado hoy?"></label><button>Consultar</button></form>
       <p id="assistant-answer" role="status"></p>
     </section>
