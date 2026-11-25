@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=aviso-voz";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=palets";
 import { installWalkie } from "./walkie.js";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -263,7 +263,7 @@ function remainingOrder(order) {
 function purchaseQuantity(data,isPurchase,amount) {
   const pallets = data.quantityUnit === "pales";
   const value = isPurchase ? (pallets ? data.sgBoughtPallets : data.boxes) : amount;
-  if (Number(value)>0) return (pallets ? formatPallets(value) : qty(value)) + " " + (pallets && Number(value)<=1 ? "palé" : orderUnitLabel(data.quantityUnit,value));
+  if (Number(value)>0) return (pallets ? formatPallets(value) : qty(value)) + " " + (pallets && Number(value)<=1 ? "palet" : orderUnitLabel(data.quantityUnit,value));
   return isPurchase && kilos(data)>0 ? qty(kilos(data))+" kg" : "";
 }
 purchases = () => {
@@ -275,7 +275,7 @@ purchases = () => {
     const isPurchase = kind === "purchase";
     const status = isPurchase && donePurchase(data) ? "done" : "pending";
     const quantity = purchaseQuantity(data,isPurchase,amount);
-    const unit = data.priceUnit === "caja" ? "caja" : data.priceUnit === "pale" ? "palé" : "kg";
+    const unit = data.priceUnit === "caja" ? "caja" : data.priceUnit === "pale" ? "palet" : "kg";
     const cost = data.priceCents==null&&data.price==null ? "—" : fmt(price(data))+"/"+unit;
     const label = [quantity,data.product,data.variety].filter(Boolean).join(" ");
     const line = '<tr class="'+status+'" data-kind="'+kind+'" data-purchase-line="'+html(row.id)+'"'
@@ -399,7 +399,7 @@ function decorate() {
   const half = document.createElement("button");
   half.type = "button";
   half.className = "secondary";
-  half.textContent = "½ palé";
+  half.textContent = "½ palet";
   half.onclick = () => { $("oBoxes").value = "½"; $("oUnit").value = "pales"; $("oUnit").dataset.manual = "1"; };
   $("oUnit").after(half);
   const date = $("oDate");
@@ -476,7 +476,7 @@ window.sgExtra = function (target) {
   if (target === "cargas") return '<div class="card"><h2>Cargas y paletizaje</h2><div class="grid"><label>Fecha <input id="sg10LoadDate" type="date" value="'
     + html(sgClientDate()) + '"></label><label>Cliente <select id="sg10LoadCompany"><option value="">Todos</option>'
     + options(sgSelectedClient()) + '</select></label></div><div class="sg10-tools"><button onclick="sg10PrintLoad()">Imprimir hoja A4</button>'
-    + '<button onclick="sgGo(\'pales\')">Palés por cliente</button><button onclick="sg10Ops(\'camera\')">Recuento con cámara</button></div></div>' + originalExtra(target);
+    + '<button onclick="sgGo(\'pales\')">Palets por cliente</button><button onclick="sg10Ops(\'camera\')">Recuento con cámara</button></div></div>' + originalExtra(target);
   return originalExtra(target);
 };
 
@@ -665,7 +665,7 @@ window.sg10FormPurchase = (data) => {
   const raw = val("sg10PurchasePallets");
   if (data.quantityUnit === "pales" && $("sg10PurchasePallets") && !$("sg10PurchasePallets").closest("label").hidden) {
     const amount = readPallets(raw);
-    if (!Number.isFinite(amount)) throw Error("Introduce palés completos o medios, por ejemplo 1, ½ o 2½.");
+    if (!Number.isFinite(amount)) throw Error("Introduce palets completos o medios, por ejemplo 1, ½ o 2½.");
     data.sgBoughtPallets = amount;
   }
   return data;

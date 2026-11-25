@@ -1,6 +1,6 @@
 import { installAguacatin } from "./portal-aguacatin.js?v=foco";
 import { installCarousel } from "./portal-carousel.js";
-import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=sacos";
+import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=palets";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
@@ -58,7 +58,7 @@ function addLine(draft = {}) {
     + '<label>Producto <input name="product" required maxlength="120" value="' + esc(draft.product) + '"></label>'
     + '<label>Variedad (opcional) <input name="variety" maxlength="120" value="' + esc(draft.variety) + '"></label>'
     + '<label>Cantidad <input name="quantity" inputmode="decimal" required value="' + esc(draft.quantity) + '"></label>'
-    + '<label>Unidad <select name="unit" required><option value="">Seleccionar</option><option value="cajas">Cajas</option><option value="pales">Palés</option><option value="sacos">Sacos</option></select></label>'
+    + '<label>Unidad <select name="unit" required><option value="">Seleccionar</option><option value="cajas">Cajas</option><option value="pales">Palets</option><option value="sacos">Sacos</option></select></label>'
     + '<label class="line-note">Observaciones <textarea name="notes" rows="2" maxlength="750">' + esc(draft.notes) + '</textarea></label></div>'
     + '<button type="button">Quitar artículo</button>';
   fieldset.querySelector("select").value = draft.unit ?? "";

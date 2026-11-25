@@ -33,7 +33,7 @@ export function matchCompany(text, companies) {
   return ranked[0]?.score !== ranked[1]?.score ? ranked[0]?.id : undefined;
 }
 
-export const orderUnits = {cajas:["caja","cajas"], pales:["palé","palés"], sacos:["saco","sacos"]};
+export const orderUnits = {cajas:["caja","cajas"], pales:["palet","palets"], sacos:["saco","sacos"]};
 export function orderUnitLabel(unit, amount) {
   return (Object.hasOwn(orderUnits,unit) ? orderUnits[unit] : orderUnits.cajas)[Number(amount) === 1 ? 0 : 1];
 }
