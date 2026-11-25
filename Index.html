@@ -30,7 +30,7 @@ const $=id=>document.getElementById(id), TABLES={clients:'sg_clients',orders:'sg
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let config={url:'https://zyzcnosaavvcijsmcowq.supabase.co',key:'sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7'};try{config={...config,...JSON.parse(localStorage.getItem(CONFIG)||'{}')}}catch{};if(!config.key)config.key='sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7';
 let api,user,workspace,role,page='inicio',editing=null,syncing=false,lastSync=null,timer=null,records={clients:[],orders:[],purchases:[]};
-const today=()=>{let d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
+const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function parseNum(v){let s=String(v??'').trim().replace(/\s/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');if(!s)return NaN;let n=Number(s);return Number.isFinite(n)?n:NaN}
 function fmt(n){return Number(n||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'}
 function qty(n){return Number(n||0).toLocaleString('es-ES',{maximumFractionDigits:3})}
@@ -130,11 +130,10 @@ function openAgu(){$('aguModal').style.display='flex';aguSay()}
 function closeAgu(){$('aguModal').style.display='none';if('speechSynthesis'in window)speechSynthesis.cancel()}
 function sgArticleAnswer(raw){
  const q=norm(raw).replace(/[¿?¡!.,]/g,' ').replace(/\s+/g,' ').trim();
- const m=q.match(/^(?:oye aguacatin\s+)?(?:dime\s+)?(?:quien(?:es)?|que clientes|cuales clientes|cuales son los clientes que|los clientes que)\s+(?:lleva[n]?|pide[n]?|tiene[n]?|compra[n]?|ha pedido|han pedido|han comprado|llevan pedido)\s+(.+)$/);
+ const m=q.match(/^(?:(?:oye\s+)?aguacatin\s+)?(?:dime\s+)?(?:quien(?:es)?|que clientes|cuales clientes|cuales son los clientes que|los clientes que)\s+(?:lleva[n]?|pide[n]?|tiene[n]?|compra[n]?|ha pedido|han pedido|han comprado|llevan pedido)\s+(.+)$/);
  if(!m)return null;
- const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
- const date=/\bayer\b/.test(q)?[yesterday.getFullYear(),String(yesterday.getMonth()+1).padStart(2,'0'),String(yesterday.getDate()).padStart(2,'0')].join('-'):today();
- const term=m[1].replace(/\b(hoy|ayer|para hoy|por favor)\b/g,' ').replace(/^(?:el|la|los|las|de)\s+/,'').trim();
+ const base=new Date(today()+'T12:00:00Z');const explicit=q.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0];const offset=/\banteayer\b/.test(q)?-2:/\bayer\b/.test(q)?-1:/\bmanana\b/.test(q)?1:0;base.setUTCDate(base.getUTCDate()+offset);const date=explicit||base.toISOString().slice(0,10);
+ const term=m[1].replace(/\b(para hoy|para manana|hoy|ayer|anteayer|manana|por favor)\b/g,' ').replace(/\b20\d{2}-\d{2}-\d{2}\b/g,'').replace(/^(?:el|la|los|las|de)\s+/,'').trim();
  const stem=t=>t.replace(/(?:es|s)$/,'');
  const tokens=term.split(/\s+/).filter(Boolean).map(stem);
  if(!tokens.length)return 'Dime el artículo que quieres consultar.';
@@ -145,7 +144,7 @@ function sgArticleAnswer(raw){
  const g=groups.get(x.clientId)||{name:d(get('clients',x.clientId)).name||'Cliente sin nombre',c:0,p:0};
  const n=Number(x.boxes)||0;if(x.quantityUnit==='pales')g.p+=n;else g.c+=n;groups.set(x.clientId,g);
  }
- const day=/\bayer\b/.test(q)?'Ayer':'Hoy';
+ const day=explicit?date:offset===-2?'Anteayer':offset===-1?'Ayer':offset===1?'Mañana':'Hoy';
  if(!groups.size)return day+' no encuentro pedidos de '+term+'.';
  const list=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
  const units=(c,p)=>[c?c+' cajas':'',p?p+' palés':''].filter(Boolean).join(' y ')||'sin cantidad';
@@ -808,8 +807,9 @@ async function run(msg){if(busy)return;busy=true;try{
  if(pending&&/^(no|cancela|cancelar|no lo guardes)$/.test(q)){pending=null;say('De acuerdo, no guardo nada.');return;}
  if(pending&&/^(si|si guardalo|guarda|guardalo|confirmo|confirmar|adelante|vale|correcto)$/.test(q)){
  const batch=pending;pending=null;let done=0;try{for(const a of batch.ops){if(a.id){const {data,error}=await api.from(TABLES.orders).select('data').eq('workspace_id',workspace).eq('id',a.id).single();if(error||JSON.stringify(data.data)!==a.original)throw Error('El pedido ha cambiado; vuelve a solicitarlo');}await save('orders',a.data,a.id);done++;}render();say(`Guardadas ${done} operaciones correctamente.`);}catch(e){say(`Guardadas ${done} de ${batch.ops.length} operaciones. ${e.message}. Revisa los pedidos antes de repetir.`);}return;}
+ const article=sgArticleAnswer(msg);if(article!==null){say(article);return;}
  const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión');
- const response=await api.functions.invoke('Sg-aguacatin-voz',{body:{mensaje:msg,agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
+ const response=await api.functions.invoke('Sg-aguacatin-voz',{body:{mensaje:msg+'\n[Contexto de fecha: hoy es '+today()+' en Europe/Madrid. Consulta exclusivamente hoy salvo fecha explícita del usuario; no leas fechas innecesariamente ni uses pedidos de otros días.]',fechaHoy:today(),zonaHoraria:'Europe/Madrid',agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
  if(response.error){let detail=null;try{detail=await response.error.context?.json()}catch(_){}throw Error(detail?.error||response.error.message||'Error de conexión con Aguacatín');}if(!response.data?.ok)throw Error(response.data?.error||'Respuesta inválida de Aguacatín');
  const result=response.data;let text=result.respuesta;
  if(Array.isArray(result.acciones)&&result.acciones.length){if(result.acciones.length>20)throw Error('Máximo 20 operaciones por lote');const ops=result.acciones.map(validate);pending={uid:user.id,workspace,expires:Date.now()+120000,ops,raw:result.acciones};text=ops.map(a=>`${a.type}: ${a.data.boxes} ${a.data.quantityUnit==='pales'?'palés':'cajas'} de ${a.data.product} para ${d(records.clients.find(r=>r.id===a.data.clientId)).name}, fecha ${a.data.date}${a.data.price===null?'':', precio '+a.data.price+' euros por '+a.data.priceUnit}`).join('. ')+'. ¿Confirmas?';}else{pending=null;}
