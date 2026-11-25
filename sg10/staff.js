@@ -36,14 +36,14 @@ function openMore() {
   const sections = [["Clientes","clientes"],["Comisiones","comisiones"],["Facturas","facturas"],["Mi compra","micompra"],
     ["Buscar producto","consultar"],["Fotos de productos","galeria"],["Walkie-talkie","walkie"],["Zona Clientes","portal"],["Ajustes","ajustes"]];
   for (const [label,target] of sections) {
+    if (target === "portal" && (role !== "owner" || user?.is_anonymous)) continue;
     const button=document.createElement("button");
     button.type="button";
     button.className="secondary";
     button.textContent=label;
     button.onclick=()=>{
       dialog.close();
-      if(target==="portal"&&role==="owner"&&!user?.is_anonymous) window.sg10Ops("clients");
-      else if(target==="portal") location.assign("./portal.html");
+      if(target==="portal") operations.previewClients();
       else if(target==="walkie") walkie.open();
       else go(target);
     };

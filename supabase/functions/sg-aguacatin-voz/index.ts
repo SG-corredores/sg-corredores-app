@@ -7,10 +7,7 @@ const headers = {
   "Cache-Control": "no-store",
 };
 
-const delivery = {
-  cheerful: "Alegre, expresivo y un poco teatral, con calidez y sentido del humor.",
-  natural: "Cercano y conversacional, con entonación natural y buen ritmo.",
-};
+const selectedVoice = "Pz2XmH0nqQgutakUVLmx";
 
 Deno.serve(async (request) => {
   const reply = (body: string, status: number) => new Response(body, { status, headers });
@@ -21,7 +18,7 @@ Deno.serve(async (request) => {
   if (!token) return reply("Inicia sesión", 401);
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-  const speechKey = Deno.env.get("OPENAI_API_KEY");
+  const speechKey = Deno.env.get("ELEVENLABS_API_KEY");
   if (!url || !key || !speechKey) return reply("Voz no configurada", 503);
 
   try {
@@ -32,16 +29,14 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => null);
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     if (!text || text.length > 1800) return reply("Texto no válido", 400);
-    const style = body.style === "natural" ? delivery.natural : delivery.cheerful;
-    const instructions = "Habla en español de España con un acento andaluz perceptible y natural. "
-      + "Usa una voz masculina adulta de registro medio, clara y con ritmo vivo. "
-      + style + " Lee el texto tal como está escrito.";
-
-    const audio = await fetch("https://api.openai.com/v1/audio/speech", {
+    const audio = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + selectedVoice + "/stream?output_format=mp3_44100_64", {
       method: "POST",
-      headers: { "Authorization": "Bearer " + speechKey, "Content-Type": "application/json" },
+      headers: { "xi-api-key": speechKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o-mini-tts-2025-12-15", voice: "cedar", input: text, instructions, response_format: "mp3",
+        text,
+        model_id: "eleven_flash_v2_5",
+        language_code: "es",
+        voice_settings: { stability: body.style === "natural" ? 0.6 : 0.45, similarity_boost: 0.85, speed: 1.1 },
       }),
       signal: AbortSignal.timeout(20_000),
     });

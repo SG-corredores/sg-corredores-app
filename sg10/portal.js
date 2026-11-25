@@ -4,12 +4,18 @@ const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
 const orderStatus = (message) => { element("order-status").textContent = message; };
 const params = new URLSearchParams(location.search);
-const previewMembership = params.has("vista") && params.has("empresa")
-  ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
-const invitation = previewMembership ? null : openInvitation("portal");
-const api = window.supabase?.createClient(publicConfig.url, publicConfig.key, {
-  auth: { ...(previewMembership ? {} : {storageKey:"sg10-customer-session"}), persistSession:true,
-    detectSessionInUrl:!previewMembership, autoRefreshToken:true },
+const previewMode = params.has("vista") || params.has("empresa");
+const previewMembership = previewMode ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
+const invitation = previewMode ? null : openInvitation("portal");
+let config = publicConfig;
+if (previewMode) {
+  try { config = { ...publicConfig, ...JSON.parse(localStorage.getItem("sg_config_v7")) }; } catch {}
+  element("login").hidden = true;
+  element("admin-preview").hidden = false;
+}
+const api = window.supabase?.createClient(config.url, config.key, {
+  auth: { ...(previewMode ? {} : {storageKey:"sg10-customer-session"}), persistSession:true,
+    detectSessionInUrl:!previewMode, autoRefreshToken:true },
 });
 if (invitation?.token) status("Invitación de cliente. Introduce el correo al que va dirigida.");
 let user, membership, memberships = [], inbox, request, gallery = [], galleryVersion = 0, refreshVersion = 0;
@@ -37,16 +43,18 @@ function addLine(draft = {}) {
   request = null;
 }
 
-element("order-date").min = madridDate();
-element("order-date").max = priorDate(30);
-element("order-date").value = madridDate();
+if (!previewMode) {
+  element("order-date").min = madridDate();
+  element("order-date").max = priorDate(30);
+  element("order-date").value = madridDate();
+  element("add-line").onclick = () => addLine();
+  element("order-form").oninput = () => { request = null; };
+  element("order-date").oninput = () => { request = null; };
+  addLine();
+}
 element("from-date").value = priorDate(-14);
 element("to-date").value = madridDate();
 element("version").textContent = version;
-element("add-line").onclick = () => addLine();
-element("order-form").oninput = () => { request = null; };
-element("order-date").oninput = () => { request = null; };
-addLine();
 
 async function refresh() {
   if (!membership) return;
@@ -118,7 +126,7 @@ setInterval(() => {
   if (galleryRow.scrollLeft + galleryRow.clientWidth >= galleryRow.scrollWidth - 5) galleryRow.scrollTo({left:0,behavior:"smooth"});
 },3800);
 
-element("interpret").onclick = async ({currentTarget:button}) => {
+if (!previewMode) element("interpret").onclick = async ({currentTarget:button}) => {
   const scope = selected();
   const text = element("source").value.trim();
   if (!scope || !text) return orderStatus("Escribe o dicta el pedido.");
@@ -137,7 +145,7 @@ element("interpret").onclick = async ({currentTarget:button}) => {
   } catch (error) { orderStatus(error.message); }
   finally { button.disabled = false; }
 };
-element("dictate").onclick = () => {
+if (!previewMode) element("dictate").onclick = () => {
   const Recognizer = window.SpeechRecognition ?? window.webkitSpeechRecognition;
   if (!Recognizer) return orderStatus("Usa el micrófono del teclado para dictar en este dispositivo.");
   const recognizer = new Recognizer();
@@ -146,7 +154,7 @@ element("dictate").onclick = () => {
   recognizer.onerror = () => orderStatus("No se pudo iniciar el dictado. Revisa el permiso del micrófono.");
   try { recognizer.start(); } catch (error) { orderStatus(error.message); }
 };
-element("order-form").onsubmit = async (event) => {
+if (!previewMode) element("order-form").onsubmit = async (event) => {
   event.preventDefault();
   const scope = selected();
   const date = element("order-date");
@@ -176,7 +184,7 @@ element("order-form").onsubmit = async (event) => {
   } catch (error) { orderStatus(error.message); }
   finally { submit.disabled = false; }
 };
-element("assistant-form").onsubmit = async (event) => {
+if (!previewMode) element("assistant-form").onsubmit = async (event) => {
   event.preventDefault();
   const scope = selected();
   if (!scope) return;
@@ -195,6 +203,10 @@ element("assistant-form").onsubmit = async (event) => {
   } catch (error) { answer.textContent = error.message; }
   finally { button.disabled = false; }
 };
+if (previewMode) {
+  element("pedidos").remove();
+  element("assistant-section").remove();
+}
 async function openCompany(index) {
   inbox?.close();
   membership = memberships[index];
@@ -225,20 +237,21 @@ async function connect() {
   const result = await api.auth.getSession();
   if (result.error) throw result.error;
   user = result.data.session?.user;
-  if(previewMembership){
-    element("login").hidden=true;
-    element("admin-preview").hidden=false;
-    if(!user)throw Error("Abre la vista desde tu sesión de administrador.");
-    membership=previewMembership;
-    try{
+  if (previewMode) {
+    if (!user || user.is_anonymous) throw Error("Vuelve a SG Corredores y entra con tu correo de administrador.");
+    const { client_id, workspace_id } = previewMembership;
+    if (!client_id || !/^[0-9a-f-]{36}$/i.test(workspace_id ?? "")) throw Error("Vuelve a SG Corredores y elige una empresa.");
+    membership = previewMembership;
+    try {
       await refresh();
-      await loadGallery();
-      element("pedidos").hidden=true;
-      element("assistant-section").hidden=true;
-      element("portal").hidden=false;
-    }catch(error){
-      membership=null;
+    } catch (error) {
+      membership = null;
+      if (error.code === "42501") throw Error("Esta vista está reservada a la cuenta de administrador.");
       throw error;
+    }
+    element("portal").hidden = false;
+    try { await loadGallery(); } catch {
+      element("gallery-list").textContent = "No se pudieron cargar las fotografías.";
     }
     return;
   }
@@ -275,6 +288,7 @@ async function connect() {
 element("spaces").onchange = ({target}) => openCompany(Number(target.value)).catch(error => status(error.message));
 element("login-form").onsubmit = async (event) => {
   event.preventDefault();
+  if (previewMode) return;
   if (!api) return status("No se pudo cargar la conexión.");
   const submit = event.submitter;
   submit.disabled = true;
@@ -288,6 +302,7 @@ element("login-form").onsubmit = async (event) => {
   finally { submit.disabled = false; }
 };
 element("sign-out").onclick = async () => {
+  if (previewMode) return;
   try {
     await detachPush(api,user.id);
     const result = await api.auth.signOut({scope:"local"});

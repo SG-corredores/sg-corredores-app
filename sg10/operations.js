@@ -549,10 +549,32 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
   }
 
   function settingsView() {
-    return '<div class="card"><h2>Zona Clientes</h2><div class="sg10-tools"><a class="secondary" href="./portal.html">Abrir Zona Clientes</a>'
-      + '<button onclick="go(\'galeria\')">Gestionar fotografías</button>'
-      + (roleOwner()?'<button onclick="sg10Ops(\'clients\')">Gestionar accesos por empresa</button><button onclick="sg10Ops(\'rules\')">Tarifas y pesos fijos</button>':'')
+    return '<div class="card"><h2>Zona Clientes</h2><div class="sg10-tools"><button onclick="go(\'galeria\')">Gestionar fotografías</button>'
+      + (roleOwner()?'<button onclick="sg10Ops(\'previewClients\')">Ver Zona Clientes</button><button onclick="sg10Ops(\'clients\')">Gestionar accesos por empresa</button><button onclick="sg10Ops(\'rules\')">Tarifas y pesos fijos</button>':'')
       + '</div></div>';
+  }
+
+  function previewClients() {
+    if (!roleOwner()) return;
+    const { workspace, records } = state();
+    const dialog = openDialog("Zona Clientes · Solo lectura");
+    const content = dialog.querySelector("[data-content]");
+    if (!records.clients.length) {
+      content.textContent = "Todavía no hay empresas para consultar.";
+      return;
+    }
+    const form = document.createElement("form");
+    form.innerHTML = '<label>Empresa <select name="company" required><option value="">Elige una empresa</option>'
+      + renderOptions(records.clients) + '</select></label><button type="submit">Ver Zona Clientes</button>';
+    content.append(form);
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      if (!roleOwner() || state().workspace !== workspace) return;
+      const target = new URL("./portal.html",location.href);
+      target.searchParams.set("vista",form.elements.company.value);
+      target.searchParams.set("empresa",workspace);
+      location.assign(target.href);
+    };
   }
   function clientForm() {
     if(!roleOwner())return;
@@ -560,7 +582,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const content=dialog.querySelector("[data-content]");
     content.innerHTML='<form><label>Empresa <select name="company" required><option value="">Seleccionar</option>'+renderOptions(state().records.clients)
       + '</select></label><label>Correo individual <input name="email" type="email" required></label><button>Invitar por correo</button> '
-      + '<button type="button" data-whatsapp>Invitar por WhatsApp</button> <button type="button" data-preview>Ver como cliente</button></form>'
+      + '<button type="button" data-whatsapp>Invitar por WhatsApp</button></form>'
       + '<p data-status role="status"></p><div data-members></div>';
     const form=content.querySelector("form");
     const message=content.querySelector("[data-status]");
@@ -600,14 +622,6 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       catch(error){message.textContent=error.message;}
       finally{button.disabled=false;}
     };
-    form.querySelector("[data-preview]").onclick=()=>{
-      if(!form.elements.company.reportValidity())return;
-      const target=new URL("./portal.html",location.href);
-      target.searchParams.set("vista",form.elements.company.value);
-      target.searchParams.set("empresa",state().workspace);
-      window.open(target.href,"_blank","noopener");
-    };
-
     form.onsubmit=async event=>{
       event.preventDefault();
       const email=form.elements.email.value.trim();
@@ -849,7 +863,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     }
     if(page==="comisiones")commissionStatus().catch(error=>toast(error.message));
   }
-  const actions={editPhoto:photoForm,removePhoto,camera:cameraForm,loadInvoices,importInvoices,reviewInvoice,clients:clientForm,rules:ruleForm,range,splitPurchase};
+  const actions={editPhoto:photoForm,removePhoto,camera:cameraForm,loadInvoices,importInvoices,reviewInvoice,clients:clientForm,previewClients,rules:ruleForm,range,splitPurchase};
   window.sg10Ops=(action,...args)=>Promise.resolve().then(()=>actions[action]?.(...args)).catch(error=>toast(error.message));
-  return {dialog:openDialog,settingsView,invoiceView,galleryView,commissionView,configureRate,decoratePurchase,afterRender,setTarget};
+  return {dialog:openDialog,previewClients,settingsView,invoiceView,galleryView,commissionView,configureRate,decoratePurchase,afterRender,setTarget};
 }
