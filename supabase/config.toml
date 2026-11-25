@@ -1,0 +1,16 @@
+project_id = "sg-corredores-app"
+
+[functions.sg10-push]
+verify_jwt = false
+
+[functions.sg10-gmail]
+verify_jwt = false
+
+[functions.sg10-aguacatin]
+verify_jwt = false
+
+[functions.sg10-client-admin]
+verify_jwt = false
+
+[functions.sg10-walkie]
+verify_jwt = false
