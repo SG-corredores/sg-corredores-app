@@ -22,7 +22,21 @@ header #status{margin-left:80px;font-size:11px}
 #aguFloat{bottom:calc(91px + env(safe-area-inset-bottom,0px))}
 @media(max-width:380px){.sg-brand-logo{height:57px;width:57px}.sg-brand{gap:8px}header>small,header #status{margin-left:65px}}
 </style><link rel="manifest" href="manifest.webmanifest"></head><body>
-<section id="login"><div class="card"><h1>🥑 SG Corredores</h1><p>30 años a su servicio · Máxima frescura y calidad</p><h2>Iniciar sesión</h2><a href="./portal.html">Zona Clientes</a><label>PIN de empleado</label><input id="sgEmployeePin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 cifras"><div class="actions"><button class="primary" type="button" onclick="sgPinLogin(this)">Entrar sin correo</button></div><p class="muted">Acceso de empleados autorizados. Solo necesitas el PIN la primera vez en este dispositivo.</p><hr><p>Acceso mediante correo</p><label>Correo</label><input id="email" type="email" autocomplete="username"><div class="actions"><button class="primary" onclick="sgMagicLink(this)">Enviar enlace de acceso</button></div><p id="loginError" role="status" aria-live="polite" style="color:#174c32;white-space:pre-wrap"></p><p class="muted">Solo empleados autorizados. Abre el enlace recibido en este mismo navegador.</p><details><summary>Acceso anterior con contraseña</summary><label>Contraseña</label><input id="password" type="password" autocomplete="current-password"><div class="actions"><button class="secondary" onclick="signIn()">Entrar</button></div></details><details><summary>Configuración de Supabase</summary><label>URL del proyecto</label><input id="projectUrl" value="https://zyzcnosaavvcijsmcowq.supabase.co"><label>Clave pública Publishable</label><input id="publicKey" placeholder="sb_publishable_..."><div class="actions"><button class="secondary" onclick="saveConfig()">Guardar conexión</button></div><p class="muted">No introduzcas claves secret ni service_role.</p></details></div></section>
+<section id="login"><div class="card"><h1>🥑 SG Corredores</h1><p>30 años a su servicio · Máxima frescura y calidad</p><h2>Iniciar sesión</h2><a href="./portal.html">Zona Clientes</a><label>PIN de empleado</label><input id="sgEmployeePin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 cifras"><div class="actions"><button class="primary" type="button" onclick="sgPinLogin(this)">Entrar sin correo</button></div><p class="muted">Acceso de empleados autorizados. Solo necesitas el PIN la primera vez en este dispositivo.</p><hr><p>Acceso mediante correo</p><label>Correo</label><input id="email" type="email" autocomplete="username"><div class="actions"><button class="primary" onclick="sgMagicLink(this)">Enviar enlace de acceso</button><button class="secondary" type="button" onclick="sgRequestPasswordReset(this)">¿Olvidaste tu contraseña?</button></div><p id="loginError" role="status" aria-live="polite" style="color:#174c32;white-space:pre-wrap"></p><p class="muted">Solo empleados autorizados. Abre el enlace recibido en este mismo navegador.</p><details><summary>Acceso anterior con contraseña</summary><label>Contraseña</label><input id="password" type="password" autocomplete="current-password"><div class="actions"><button class="secondary" onclick="signIn()">Entrar</button></div></details><details><summary>Configuración de Supabase</summary><label>URL del proyecto</label><input id="projectUrl" value="https://zyzcnosaavvcijsmcowq.supabase.co"><label>Clave pública Publishable</label><input id="publicKey" placeholder="sb_publishable_..."><div class="actions"><button class="secondary" onclick="saveConfig()">Guardar conexión</button></div><p class="muted">No introduzcas claves secret ni service_role.</p></details></div></section>
+<section id="sgPasswordRecovery" hidden>
+  <div class="card">
+    <h1>Recuperar contraseña</h1>
+    <p id="sgPasswordRecoveryStatus" role="status" aria-live="polite"></p>
+    <form id="sgPasswordRecoveryForm" hidden onsubmit="sgSaveRecoveredPassword(event)">
+      <label for="sgNewPassword">Nueva contraseña</label>
+      <input id="sgNewPassword" type="password" autocomplete="new-password" required>
+      <label for="sgConfirmPassword">Repite la nueva contraseña</label>
+      <input id="sgConfirmPassword" type="password" autocomplete="new-password" required>
+      <div class="actions"><button class="primary" type="submit">Guardar contraseña</button></div>
+    </form>
+    <p><a href="./Index.html">Volver al inicio de sesión</a></p>
+  </div>
+</section>
 <section id="app"><header><div class="sg-brand"><img class="sg-brand-logo" alt="Logotipo SG" src="./sg10/logotipo.png"><div><h1>SERRANO GAGO</h1><div class="sg-brand-sub">CORREDORES</div></div></div><small>Corredores de frutas y verduras</small><div id="status" class="muted" style="color:#c5e9d1">Conectando...</div></header><nav id="nav"><button onclick="go('inicio')">Inicio</button><button onclick="go('hoja')">¿Quién pide hoy?</button><button onclick="go('clientes')">Clientes</button><button onclick="go('pedidos')">Pedidos</button><button onclick="go('compras')">Compras</button><button onclick="go('comisiones')">Comisiones</button><button onclick="go('cargas')">Cargas e informes</button><button onclick="go('ajustes')">Ajustes</button></nav><main id="content"></main></section><div id="toast"></div>
 <script>
 'use strict';
@@ -39,11 +53,17 @@ function val(id){return $(id)?.value?.trim()||''}function d(r){return r?.data||{
 function name(id){return d(get('clients',id)).name||'Cliente no encontrado'}
 function toast(s){$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').style.display='none',6000)}
 function err(e){return e?.message||String(e)}
-function connect(){if(!window.supabase?.createClient)throw Error('No se pudo cargar Supabase. Comprueba Internet.');if(!config.key)throw Error('Abre Configuración de Supabase e introduce la clave pública.');api=window.supabase.createClient(config.url,config.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
+function sgCreateClient(auth){
+  if(!window.supabase?.createClient)throw Error('No se pudo cargar Supabase. Comprueba Internet.');
+  if(!config.key)throw Error('Abre Configuración de Supabase e introduce la clave pública.');
+  return window.supabase.createClient(config.url,config.key,{auth});
+}
+function connect(){api=sgCreateClient({persistSession:true,autoRefreshToken:true,detectSessionInUrl:true})}
 function saveConfig(){let url=val('projectUrl').replace(/\/$/,'');let key=val('publicKey');if(!url.startsWith('https://')||!(key.startsWith('sb_publishable_')||key.startsWith('eyJ'))){toast('Comprueba URL y clave pública.');return}config={url,key};localStorage.setItem(CONFIG,JSON.stringify(config));try{connect();toast('Conexión configurada. Inicia sesión.')}catch(e){toast(err(e))}}
 async function sgPinLogin(button){
 button.disabled=true;const field=$('sgEmployeePin');const pin=field.value;field.value='';
 try{if(!/^\d{6}$/.test(pin))throw Error('Introduce el PIN de seis cifras.');$('loginError').textContent='Comprobando acceso…';if(!api)connect();let {data,error}=await api.auth.getSession();if(error)throw error;let session=data.session;if(session&&!session.user.is_anonymous)throw Error('Ya existe una sesión con correo. Utiliza tu acceso habitual.');if(!session){const result=await api.auth.signInAnonymously();if(result.error)throw result.error;session=result.data.session;}if(!session)throw Error('No se pudo iniciar la sesión.');const result=await api.functions.invoke('smart-api',{body:{pin},headers:{Authorization:'Bearer '+session.access_token}});if(result.error){let message='';try{const detail=await result.error.context.json();message=detail.mensaje||'';}catch{}throw Error(message||'No se pudo validar el PIN. Comprueba la configuración de Supabase.');}if(!result.data?.ok)throw Error('Acceso no autorizado.');user=session.user;await enter();$('loginError').textContent='';}catch(e){$('loginError').textContent=err(e);}finally{button.disabled=false;}}
+const sgStaffLoginUrl='https://sg-corredores.github.io/sg-corredores-app/Index.html';
 const sgStaffInviteKey='sg10-staff-invite';
 const sgInviteFragment=new URLSearchParams(location.hash.slice(1));
 if(/^[a-f0-9]{64}$/.test(sgInviteFragment.get('sg-invitacion')||'')){
@@ -57,7 +77,87 @@ function sgStaffInviteNotice(){
   reset.onclick=async()=>{await api?.auth.signOut({scope:'local'});user=null;sgStaffInviteNotice()};
   container.append(document.createElement('br'),reset);
 }
-async function sgMagicLink(button){button.disabled=true;try{$("loginError").textContent="Enviando enlace…";if(!api)connect();const email=val("email");if(!email||!$("email").checkValidity())throw Error("Introduce un correo válido.");const {error}=await api.auth.signInWithOtp({email,options:{shouldCreateUser:!!localStorage.getItem(sgStaffInviteKey),emailRedirectTo:"https://sg-corredores.github.io/sg-corredores-app/Index.html"}});if(error)throw error;$("loginError").textContent="Revisa tu correo y abre el enlace de acceso."}catch(e){$("loginError").textContent=err(e)}finally{button.disabled=false}}
+async function sgMagicLink(button){button.disabled=true;try{$("loginError").textContent="Enviando enlace…";if(!api)connect();const email=val("email");if(!email||!$("email").checkValidity())throw Error("Introduce un correo válido.");const {error}=await api.auth.signInWithOtp({email,options:{shouldCreateUser:!!localStorage.getItem(sgStaffInviteKey),emailRedirectTo:sgStaffLoginUrl}});if(error)throw error;$("loginError").textContent="Revisa tu correo y abre el enlace de acceso."}catch(e){$("loginError").textContent=err(e)}finally{button.disabled=false}}
+let sgRecoveryClient;
+async function sgRequestPasswordReset(button){
+  const email=$('email');
+  const status=$('loginError');
+  if(!email.value.trim()||!email.reportValidity()){
+    status.textContent='Introduce el correo de tu cuenta para recuperar la contraseña.';
+    email.focus();
+    return;
+  }
+  button.disabled=true;
+  status.textContent='Solicitando enlace de recuperación…';
+  try{
+    if(!api)connect();
+    const {error}=await api.auth.resetPasswordForEmail(email.value.trim(),{redirectTo:sgStaffLoginUrl});
+    if(error && error.code!=='user_not_found')throw error;
+    status.textContent='Si ese correo está registrado, recibirás un enlace para crear una nueva contraseña.';
+  }catch(error){
+    status.textContent=error.status===429
+      ? 'Espera un momento antes de solicitar otro enlace.'
+      : 'No se pudo solicitar el enlace. Inténtalo de nuevo en unos minutos.';
+  }finally{
+    button.disabled=false;
+  }
+}
+async function sgOpenPasswordRecovery(callback,fragment){
+  $('login').style.display='none';
+  $('sgPasswordRecovery').hidden=false;
+  const status=$('sgPasswordRecoveryStatus');
+  status.textContent='Comprobando enlace…';
+  try{
+    // Keep the recovery session separate from any existing login on this device.
+    const client=sgCreateClient({
+      storageKey:'sg10-password-recovery',persistSession:false,autoRefreshToken:false,detectSessionInUrl:true,
+    });
+    const {data,error}=await client.auth.getSession();
+    if(error||!data.session?.user||data.session.user.is_anonymous
+      ||data.session.access_token!==fragment.get('access_token'))throw Error('Invitación de recuperación inválida');
+    sgRecoveryClient=client;
+    status.textContent='Crea una contraseña para tu cuenta.';
+    $('sgPasswordRecoveryForm').hidden=false;
+    $('sgNewPassword').focus();
+  }catch{
+    status.textContent='El enlace no es válido o ha caducado. Vuelve al inicio y solicita otro.';
+  }finally{
+    history.replaceState(null,'',callback.pathname);
+  }
+}
+async function sgSaveRecoveredPassword(event){
+  event.preventDefault();
+  const client=sgRecoveryClient;
+  const form=event.currentTarget;
+  const button=form.querySelector('button');
+  const status=$('sgPasswordRecoveryStatus');
+  const password=$('sgNewPassword').value;
+  if(!client||button.disabled)return;
+  if(!password||password!==$('sgConfirmPassword').value){
+    status.textContent='Comprueba que las dos contraseñas coinciden.';
+    $('sgConfirmPassword').focus();
+    return;
+  }
+  button.disabled=true;
+  status.textContent='Guardando contraseña…';
+  try{
+    const {error}=await client.auth.updateUser({password});
+    if(error)throw error;
+    sgRecoveryClient=null;
+    form.reset();
+    form.hidden=true;
+    status.textContent='Contraseña actualizada. Ya puedes volver al inicio e iniciar sesión.';
+    await client.auth.signOut({scope:'local'}).catch(()=>{});
+  }catch(error){
+    status.textContent=error.code==='same_password'
+      ? 'Elige una contraseña diferente de la anterior.'
+      : error.code==='weak_password'
+        ? 'Elige una contraseña más fuerte y vuelve a intentarlo.'
+        : 'No se pudo guardar la contraseña. Si el enlace ha caducado, vuelve al inicio y solicita otro.';
+  }finally{
+    button.disabled=false;
+  }
+}
 async function signIn(){try{$('loginError').textContent='';if(!api)connect();let email=val('email'),password=$('password').value;if(!email||!password)throw Error('Introduce correo y contraseña.');let {data,error}=await api.auth.signInWithPassword({email,password});if(error)throw error;user=data.user;await enter()}catch(e){$('loginError').textContent=err(e)}}
 async function enter(){
  const invitation=localStorage.getItem(sgStaffInviteKey);
@@ -186,6 +286,10 @@ function dance(){let a=$('avo');if(!a)return;a.classList.remove('dance');void a.
 async function init(){
  const callback=new URL(location.href);
  const fragment=new URLSearchParams(callback.hash.slice(1));
+ if(fragment.get('type')==='recovery'){
+   await sgOpenPasswordRecovery(callback,fragment);
+   return;
+ }
  if(localStorage.getItem('sg10-portal-invite')&&!localStorage.getItem(sgStaffInviteKey)
    && (fragment.has('access_token')||callback.searchParams.has('code'))){
    const portal=new URL('./portal.html',callback);portal.hash=callback.hash;portal.search=callback.search;
