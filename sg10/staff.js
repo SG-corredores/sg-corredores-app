@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, matchCompany, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=whatsapp-directo";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=sacos";
 import { installWalkie } from "./walkie.js";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -263,7 +263,7 @@ function remainingOrder(order) {
 function purchaseQuantity(data,isPurchase,amount) {
   const pallets = data.quantityUnit === "pales";
   const value = isPurchase ? (pallets ? data.sgBoughtPallets : data.boxes) : amount;
-  if (Number(value)>0) return pallets ? formatPallets(value)+(Number(value)<=1?" palé":" palés") : qty(value)+(Number(value)===1?" caja":" cajas");
+  if (Number(value)>0) return (pallets ? formatPallets(value) : qty(value)) + " " + (pallets && Number(value)<=1 ? "palé" : orderUnitLabel(data.quantityUnit,value));
   return isPurchase && kilos(data)>0 ? qty(kilos(data))+" kg" : "";
 }
 purchases = () => {
@@ -299,6 +299,8 @@ purchases = () => {
 };
 
 function fillPurchaseOrder(order) {
+  const countLabel = document.querySelector('label[for="pBoxes"]');
+  countLabel.textContent = order?.data.quantityUnit === "sacos" ? "Sacos" : "Cajas";
   if (!order) return;
   const data = order.data;
   $("pClient").value=data.clientId;
@@ -428,25 +430,25 @@ function loadSheet() {
     const groups = companies.get(data.clientId) ?? new Map();
     const supplier = data.supplier || "Sin puesto";
     const list = groups.get(supplier) ?? [];
-    list.push([unit === "palés" ? formatPallets(n) + " palés" : qty(n) + " cajas",
+    list.push([(unit === "pales" ? formatPallets(n) : qty(n)) + " " + orderUnitLabel(unit,n),
       [data.product,data.variety].filter(Boolean).join(" "),supplier]);
     groups.set(supplier,list);
     companies.set(data.clientId,groups);
   }
   for (const row of purchases) {
     const x = d(row);
-    if (Number(x.boxes) > 0) add(x,Number(x.boxes),"cajas");
-    else if (x.quantityUnit === "pales" && Number(x.sgBoughtPallets) > 0) add(x,Number(x.sgBoughtPallets),"palés");
+    if (Number(x.boxes) > 0) add(x,Number(x.boxes),x.quantityUnit === "sacos" ? "sacos" : "cajas");
+    else if (x.quantityUnit === "pales" && Number(x.sgBoughtPallets) > 0) add(x,Number(x.sgBoughtPallets),"pales");
   }
   for (const row of orders) {
     const x = d(row);
     const linked = purchases.filter(p => d(p).orderId === row.id).map(d);
     if (x.quantityUnit === "pales") {
-      if (!linked.length) add(x,Number(x.boxes),"palés");
+      if (!linked.length) add(x,Number(x.boxes),"pales");
       continue;
     }
     const remaining = Number(x.boxes) - linked.reduce((n,p) => n + (Number(p.boxes) || 0),0);
-    if (remaining > 0) add(x,remaining,"cajas");
+    if (remaining > 0) add(x,remaining,x.quantityUnit);
   }
   if (!companies.size) return toast("No hay mercancía en esa selección.");
   const windowPrint = window.open("","_blank");
@@ -574,17 +576,16 @@ function answer(text, voice = true) {
   $("aguBubble").textContent = text;
   if (voice && typeof window.aguSay === "function") window.aguSay(text);
 }
-function assistantDraft(rows, selectedClient) {
+function assistantDraft(rows, selectedClient, date) {
   const dialog = operations.dialog("Revisar pedido de Aguacatín");
   const form = document.createElement("form");
   form.innerHTML = '<label>Cliente <select name="client" required><option value="">Seleccionar</option>' + options(selectedClient)
-    + '</select></label><label>Fecha <input name="date" type="date" value="' + html(sgClientDate()) + '" required></label>'
+    + '</select></label><label>Fecha <input name="date" type="date" value="' + html(date) + '" required></label>'
     + rows.map((row,index) => '<fieldset><legend>Artículo ' + (index+1) + '</legend><label>Producto <input name="product" maxlength="120" required value="'
-      + html(row.product) + '"></label><label>Variedad <input name="variety" maxlength="120" value="' + html(row.variety)
+      + html(row.product) + '"></label><label>Variedad (opcional) <input name="variety" maxlength="120" value="' + html(row.variety)
       + '"></label><label>Cantidad <input name="quantity" required inputmode="decimal" value="' + html(row.quantity)
-      + '"></label><label>Unidad <select name="unit" required><option value="">Seleccionar</option>'
-      + '<option value="cajas"' + (row.unit === "cajas" ? " selected" : "") + '>Cajas</option>'
-      + '<option value="pales"' + (row.unit === "pales" ? " selected" : "") + '>Palés</option></select></label></fieldset>').join("")
+      + '"></label><label>Unidad <select name="unit" required>'
+      + sgUnitOptions(row.unit) + '</select></label></fieldset>').join("")
     + '<button type="submit">Confirmar y guardar</button><p role="status"></p>';
   dialog.querySelector("[data-content]").append(form);
   const context = currentScope();
@@ -622,14 +623,14 @@ const legacySend = window.aguSend;
 window.aguSend = async function () {
   const input = $("aguFloatInput");
   const text = input?.value.trim();
-  if (!text || !workspace || !user || user.is_anonymous) return legacySend?.();
+  if (!text || !workspace || !user) return legacySend?.();
   const query = normalized(text);
   if (/^(imprime|imprimir|saca en papel|modifica|cambia|confirma|anula|elimina|carga)\b/.test(query)) return legacySend?.();
   if (busy) return;
   busy = true;
   input.value = "";
   const account = currentScope();
-  const mode = /^(?:(?:oye )?aguacatin )?(crea|prepara|anota|anotame|apunta|apuntame|registra|haz|pon|pide|nuevo pedido|interpreta)\b/.test(query) ? "pedido" : "consulta";
+  const mode = isOrderRequest(text) ? "pedido" : "consulta";
   const date = text.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? sgClientDate();
   $("aguBubble").textContent = mode === "pedido" ? "Preparando el borrador…" : "Consultando los datos…";
   try {
@@ -639,8 +640,9 @@ window.aguSend = async function () {
     if (account !== currentScope() || $("aguControls").hidden) return;
     if (mode === "pedido" && Array.isArray(result.articulos) && result.articulos.length) {
       const company = matchCompany(text,records.clients.map(row => ({id:row.id,name:d(row).name})));
-      assistantDraft(result.articulos.slice(0,30),company);
-      answer("He preparado un borrador. Revisa los artículos y confirma para guardarlos.");
+      if (result.articulos.length > 30) throw Error("Puedes confirmar hasta 30 artículos por pedido. Dicta el pedido en dos partes.");
+      assistantDraft(result.articulos,company,/^20\d{2}-\d{2}-\d{2}$/.test(result.fecha) ? result.fecha : date);
+      answer("He preparado " + result.articulos.length + (result.articulos.length === 1 ? " artículo." : " artículos.") + " Revisa el borrador y confirma para guardarlo.");
     } else {
       answer(result.respuesta);
       history = [...history,{role:"user",content:text},{role:"assistant",content:result.respuesta}].slice(-6);

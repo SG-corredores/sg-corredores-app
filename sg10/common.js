@@ -31,6 +31,18 @@ export function matchCompany(text, companies) {
   return ranked[0]?.score !== ranked[1]?.score ? ranked[0]?.id : undefined;
 }
 
+export const orderUnits = {cajas:["caja","cajas"], pales:["palé","palés"], sacos:["saco","sacos"]};
+export function orderUnitLabel(unit, amount) {
+  return (Object.hasOwn(orderUnits,unit) ? orderUnits[unit] : orderUnits.cajas)[Number(amount) === 1 ? 0 : 1];
+}
+
+export function isOrderRequest(text) {
+  const query = normalized(text).replace(/^[¡¿\s]*/, "").replace(/^(?:oye )?aguacatin[,:\s]+/, "").replace(/^por favor[,:\s]+/, "");
+  if (/^(?:quiero saber|quisiera saber|me puedes decir|dime|consulta|consultar|busca|mira|que|cuant[oa]s?|quien(?:es)?|hay|tiene[n]?|llevan?|se ha[n]?)\b/.test(query)) return false;
+  if (/^(?:crea|prepara|anota|anotame|anotale|apunta|apuntame|apuntale|anade|agrega|registra|registrame|haz(?:me)?|pon(?:le|me)?|pide|nuevo pedido|interpreta|necesito|quiero|quisiera|querria|pedimos|pedir|te pido|pedirte|me pones|por favor)\b/.test(query)) return true;
+  return /^(?:\d+(?:[.,]\d+)?|medio|media|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:cajas?|pales?|palets?|pallets?|sacos?)\b/.test(query);
+}
+
 export async function invoke(api, fn, body) {
   const { data, error } = await api.functions.invoke(fn, { body });
   if (error) {

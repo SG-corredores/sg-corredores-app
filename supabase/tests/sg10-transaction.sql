@@ -35,6 +35,16 @@ begin
   if jsonb_array_length(snapshot->'orders')<>1 or snapshot->>'company' <> 'Empresa prueba A' then
     raise exception 'Lectura propia de A incorrecta'; end if;
   order_id:=snapshot->'orders'->0->>'id';
+  perform set_config('request.jwt.claims',json_build_object('sub',a,'role','authenticated','is_anonymous',true)::text,true);
+  select public.sg10_portal_order(space,client_a,gen_random_uuid(),day,
+    '[{"product":"manzanas","quantity":3,"unit":"cajas"},
+      {"product":"patatas","quantity":2,"unit":"sacos"},
+      {"product":"tomates","variety":"pera","quantity":1,"unit":"pales"}]') into actual;
+  if actual<>3 then raise exception 'El pedido de tres artículos no se guardó completo'; end if;
+  select public.sg10_portal_snapshot(space,client_a,day,day) into snapshot;
+  if not (snapshot->'orders' @> '[{"product":"manzanas","variety":"","unit":"cajas","quantity":3},{"product":"patatas","variety":"","unit":"sacos","quantity":2},{"product":"tomates","variety":"pera","unit":"pales","quantity":1}]') then
+    raise exception 'El pedido de varias unidades o sus variedades opcionales no se conservaron';
+  end if;
   begin
     perform public.sg10_portal_snapshot(space,client_b,day,day);
     raise exception 'A pudo leer B';
@@ -57,6 +67,11 @@ begin
   if jsonb_array_length(snapshot->'orders')<>0 then raise exception 'B pudo leer pedidos de A'; end if;
 
   perform set_config('request.jwt.claims',json_build_object('sub',staff,'role','authenticated')::text,true);
+  select public.sg10_staff_order(space,gen_random_uuid(),jsonb_build_array(
+    jsonb_build_object('clientId',client_b,'date',day,'product','cebollas','quantityUnit','sacos','boxes',4))) into actual;
+  if actual<>1 or not exists(select 1 from public.sg_orders where workspace_id=space and data @> '{"product":"cebollas","variety":"","quantityUnit":"sacos","boxes":4}') then
+    raise exception 'No se guardó el pedido de sacos sin variedad del empleado';
+  end if;
   select public.sg10_split_purchase(space,order_id,split_id,split_lines) into actual;
   if actual<>2 then raise exception 'No se guardaron los dos puestos'; end if;
   select public.sg10_split_purchase(space,order_id,split_id,split_lines) into actual;

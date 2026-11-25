@@ -1,6 +1,6 @@
 import { installAguacatin } from "./portal-aguacatin.js";
 import { installCarousel } from "./portal-carousel.js";
-import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js?v=whatsapp-directo";
+import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=sacos";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
@@ -56,9 +56,9 @@ function addLine(draft = {}) {
   const fieldset = document.createElement("fieldset");
   fieldset.innerHTML = '<legend>Artículo ' + ++lineCounter + '</legend><div class="line-grid">'
     + '<label>Producto <input name="product" required maxlength="120" value="' + esc(draft.product) + '"></label>'
-    + '<label>Variedad <input name="variety" maxlength="120" value="' + esc(draft.variety) + '"></label>'
+    + '<label>Variedad (opcional) <input name="variety" maxlength="120" value="' + esc(draft.variety) + '"></label>'
     + '<label>Cantidad <input name="quantity" inputmode="decimal" required value="' + esc(draft.quantity) + '"></label>'
-    + '<label>Unidad <select name="unit" required><option value="">Seleccionar</option><option value="cajas">Cajas</option><option value="pales">Palés</option></select></label>'
+    + '<label>Unidad <select name="unit" required><option value="">Seleccionar</option><option value="cajas">Cajas</option><option value="pales">Palés</option><option value="sacos">Sacos</option></select></label>'
     + '<label class="line-note">Observaciones <textarea name="notes" rows="2" maxlength="750">' + esc(draft.notes) + '</textarea></label></div>'
     + '<button type="button">Quitar artículo</button>';
   fieldset.querySelector("select").value = draft.unit ?? "";
@@ -92,9 +92,9 @@ async function refresh() {
   if (error || !data) throw error ?? Error("Esta empresa no está disponible.");
   element("company-name").textContent = data.company;
   element("history-list").innerHTML = '<h3>Pedidos</h3>'
-    + (data.orders.map(row => record(row, row.quantity, row.unit === "pales" ? "palés" : "cajas")).join("") || "<p>Sin pedidos en este periodo.</p>")
+    + (data.orders.map(row => record(row, row.quantity, orderUnitLabel(row.unit,row.quantity))).join("") || "<p>Sin pedidos en este periodo.</p>")
     + '<h3>Compras y cargas</h3>'
-    + (data.purchases.map(row => record(row,row.boxes,"cajas")).join("") || "<p>Sin compras en este periodo.</p>");
+    + (data.purchases.map(row => record(row,row.quantity ?? row.boxes,orderUnitLabel(row.unit,row.quantity ?? row.boxes))).join("") || "<p>Sin compras en este periodo.</p>");
   element("invoice-list").innerHTML = data.invoices.map(row =>
     '<div class="row"><b>' + esc(row.number) + '</b> · ' + esc(row.supplier) + ' <small>' + esc(row.date)
     + ' · ' + esc(row.total == null ? "Importe pendiente" : row.total + " €") + '</small></div>').join("") || "<p>Sin facturas autorizadas en este periodo.</p>";
@@ -184,24 +184,45 @@ element("gallery-list").onclick = ({target}) => {
   };
   element("photo").showModal();
 };
-if (!previewMode) element("interpret").onclick = async ({currentTarget:button}) => {
+let preparingOrder = false;
+async function prepareOrder(text) {
   const scope = selected();
-  const text = element("source").value.trim();
-  if (!scope || !text) return orderStatus("Escribe o dicta el pedido.");
+  const context = assistantContext;
+  if (!scope || !text) throw Error("Escribe o dicta el pedido.");
+  if (preparingOrder) throw Error("Espera a que se prepare el pedido en curso.");
+  const button = element("interpret");
+  preparingOrder = true;
   button.disabled = true;
   orderStatus("Interpretando el pedido…");
   try {
     const result = await invoke(api,"sg10-aguacatin",{...scope,mode:"pedido",text});
-    if (selected()?.company !== scope.company || selected()?.workspace !== scope.workspace) return;
+    if (context !== assistantContext) return;
     if (!Array.isArray(result.articulos) || !result.articulos.length) throw Error(result.respuesta || "No he identificado artículos.");
     const rows = [...element("lines").querySelectorAll("fieldset")];
-    for (const row of rows) {
-      if ([...row.querySelectorAll("input,textarea,select")].every(input => !input.value)) row.remove();
+    const unused = rows.filter(row => [...row.querySelectorAll("input,textarea,select")].every(input => !input.value));
+    if (rows.length - unused.length + result.articulos.length > 30) throw Error("Puedes confirmar hasta 30 artículos por pedido. Guarda el borrador antes de añadir más.");
+    for (const row of unused) row.remove();
+    const date = element("order-date");
+    if (typeof result.fecha === "string" && result.fecha >= date.min && result.fecha <= date.max && /^20\d{2}-\d{2}-\d{2}$/.test(result.fecha)) {
+      date.value = result.fecha;
+      request = null;
     }
-    result.articulos.slice(0,30).forEach(addLine);
-    orderStatus("Revisa los artículos y confirma para guardarlos.");
-  } catch (error) { orderStatus(error.message); }
-  finally { button.disabled = false; }
+    result.articulos.forEach(addLine);
+    const message = result.articulos.length === 1 ? "He preparado un artículo. Revísalo y confirma para guardarlo."
+      : "He preparado " + result.articulos.length + " artículos. Revísalos y confirma para guardarlos.";
+    orderStatus(message);
+    return message;
+  } catch (error) {
+    if (context === assistantContext) throw error;
+  } finally {
+    if (context === assistantContext) {
+      preparingOrder = false;
+      button.disabled = false;
+    }
+  }
+}
+if (!previewMode) element("interpret").onclick = () => {
+  prepareOrder(element("source").value.trim()).catch(error => orderStatus(error.message));
 };
 if (!previewMode) element("dictate").onclick = () => {
   const Recognizer = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -221,7 +242,7 @@ if (!previewMode) element("order-form").onsubmit = async (event) => {
     const value = (name) => row.querySelector('[name="' + name + '"]').value.trim();
     return { product:value("product"), variety:value("variety"), quantity:validNumber(value("quantity")), unit:value("unit"), notes:value("notes") };
   });
-  if (!lines.length || lines.length > 30 || lines.some(row => !row.product || !Number.isFinite(row.quantity) || row.quantity <= 0 || !row.unit)) {
+  if (!lines.length || lines.length > 30 || lines.some(row => !row.product || !Number.isFinite(row.quantity) || row.quantity <= 0 || !Object.hasOwn(orderUnits,row.unit))) {
     return orderStatus("Introduce de 1 a 30 artículos con nombre, cantidad positiva y unidad.");
   }
   const duplicate = new Set(lines.map(row => JSON.stringify([row.product.toLowerCase(),row.variety.toLowerCase(),row.unit,row.quantity])));
@@ -255,7 +276,12 @@ async function askAguacatin(text) {
     return result.respuesta;
   } finally { context.busy = false; }
 }
-const resetFloatingAguacatin = installAguacatin(previewMode,askAguacatin);
+const resetFloatingAguacatin = installAguacatin(previewMode,async text => {
+  if (!isOrderRequest(text)) return askAguacatin(text);
+  const message = await prepareOrder(text);
+  if (message) goToSection("pedidos");
+  return message;
+});
 if (!previewMode) element("assistant-form").onsubmit = async (event) => {
   event.preventDefault();
   const context = assistantContext;
@@ -283,6 +309,8 @@ async function openCompany(index) {
   membership = memberships[index];
   assistantContext = {history:[], busy:false};
   resetFloatingAguacatin();
+  preparingOrder = false;
+  element("interpret").disabled = false;
   element("question").value = "";
   element("assistant-form").querySelector("button").disabled = false;
   request = null;
