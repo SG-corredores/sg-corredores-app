@@ -210,19 +210,65 @@ export function openInvitation(surface) {
 }
 
 export async function prepareWhatsAppInvite(api, workspace, email, company, target) {
-  const {data: token, error} = await api.rpc("sg10_create_whatsapp_invite", {
-    p_workspace: workspace, p_email: email, p_client: company,
-  });
-  if (error) throw error;
-  if (!/^[a-f0-9]{64}$/.test(token ?? "")) throw Error("No se pudo generar la invitación.");
-  const invitation = new URL(company === null ? "./Index.html" : "./portal.html", location.href);
-  invitation.hash = "sg-invitacion=" + token;
-  const text = "SG Corredores te invita a " + (company === null ? "la app de empleados" : "la Zona Clientes")
-    + ". Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.\n" + invitation.href;
-  const share = document.createElement("a");
-  share.href = "https://wa.me/?text=" + encodeURIComponent(text);
-  share.target = "_blank";
-  share.rel = "noopener noreferrer";
-  share.textContent = "Abrir WhatsApp para compartir";
-  target.replaceChildren(share);
+  target.textContent = "Preparando invitación…";
+  // Open during the tap, before waiting for the invitation token.
+  let popup;
+  try {
+    popup = window.open("about:blank", "_blank");
+    if (popup) {
+      popup.opener = null;
+      popup.document.title = "SG Corredores";
+      popup.document.body.textContent = "Preparando invitación para WhatsApp…";
+    }
+  } catch {
+    popup?.close();
+    popup = null;
+  }
+
+  let opened = false;
+  try {
+    const {data: token, error} = await api.rpc("sg10_create_whatsapp_invite", {
+      p_workspace: workspace, p_email: email, p_client: company,
+    });
+    if (error) throw error;
+    if (!/^[a-f0-9]{64}$/.test(token ?? "")) throw Error("No se pudo generar la invitación.");
+    if (!target.isConnected) return;
+
+    const invitation = new URL(company === null ? "./Index.html" : "./portal.html", location.href);
+    invitation.hash = "sg-invitacion=" + token;
+    const text = "SG Corredores te invita a " + (company === null ? "la app de empleados" : "la Zona Clientes")
+      + ". Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.\n" + invitation.href;
+
+    const share = document.createElement("a");
+    share.href = "https://wa.me/?text=" + encodeURIComponent(text);
+    share.target = "_blank";
+    share.rel = "noopener noreferrer";
+    share.textContent = "Abrir WhatsApp";
+
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "secondary";
+    copy.textContent = "Copiar invitación";
+    const status = document.createElement("span");
+    copy.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        status.textContent = " Invitación copiada.";
+      } catch {
+        status.textContent = " Puedes compartirla con «Abrir WhatsApp».";
+      }
+    };
+    target.replaceChildren(share, " · ", copy, status);
+
+    if (popup && !popup.closed) {
+      try {
+        popup.location.replace(share.href);
+        opened = true;
+      } catch {
+        // The visible link also works when this browser blocks the automatic handoff.
+      }
+    }
+  } finally {
+    if (!opened && popup && !popup.closed) popup.close();
+  }
 }
