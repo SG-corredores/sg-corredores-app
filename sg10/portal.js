@@ -3,6 +3,17 @@ import { openInvitation, publicConfig, esc, madridDate, validNumber, invoke, att
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
 const orderStatus = (message) => { element("order-status").textContent = message; };
+const navigation = [...document.querySelectorAll(".portal-nav a")];
+function markSection() {
+  const active = navigation.find(link => link.isConnected && link.hash === location.hash)
+    ?? navigation[0];
+  for (const link of navigation) {
+    if (link === active) link.setAttribute("aria-current","location");
+    else link.removeAttribute("aria-current");
+  }
+}
+window.addEventListener("hashchange",markSection);
+markSection();
 const params = new URLSearchParams(location.search);
 const previewMode = params.has("vista") || params.has("empresa");
 const previewMembership = previewMode ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
