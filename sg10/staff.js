@@ -1,6 +1,22 @@
+import { commissionAmount, commissionEuros, commissionPeriod } from "./commission-math.js";
+import { exportCommission, shareCommission } from "./commission-export.js";
 import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=palets";
 import { installWalkie } from "./walkie.js?v=supabase";
-import { installOperations } from "./operations.js?v=whatsapp-directo";
+import { installOrderRecovery } from "./order-recovery.js";
+import { installOperations } from "./operations.js?v=pedidos-comisiones-rc9";
+
+const recovery = installOrderRecovery({connection:()=>({api,workspace,user})});
+window.sgOrderRecovery = recovery;
+async function retryOrders() {
+  if (!currentScope() || !recovery.pending().length) return;
+  const account = currentScope();
+  const confirmed = await recovery.retry();
+  if (account !== currentScope()) return;
+  await sync(true,true);
+  if (confirmed) toast(confirmed + (confirmed === 1 ? " guardado recuperado." : " guardados recuperados."));
+  if (page === "hoja" && !document.querySelector("#dailyDialog:not([hidden])")) render();
+}
+window.addEventListener("online",retryOrders);
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -99,7 +115,19 @@ function decorateDaily() {
     holder.hidden=true;
     holder.classList.add("sg10-sheet-extra");
   }
+  sheet.querySelector("#dailyImport")?.remove();
   orderToolbar(sheet);
+  const pending = recovery.pending().length;
+  if (pending) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Reintentar guardados sin confirmar (" + pending + ")";
+    retry.onclick = async () => {
+      retry.disabled = true;
+      try { await retryOrders(); } finally { retry.disabled = false; }
+    };
+    sheet.querySelector(".sg10-page-tools").append(retry);
+  }
   const dailyOptions=sheet.querySelector(".sg10-page-tools .sg10-tools");
   const previous=document.createElement("button");
   const next=document.createElement("button");
@@ -146,8 +174,8 @@ function simpleOrderForm() {
   if(form.querySelector(".sg10-advanced"))return;
   const advanced=document.createElement("details");
   advanced.className="sg10-advanced";
-  advanced.innerHTML="<summary>Variedad, observaciones, precio y estado</summary>";
-  const fields=["oVariety","oPrice","oPriceUnit","oStatus"].map(id=>$(id)?.parentElement).filter(Boolean);
+  advanced.innerHTML="<summary>Variedad, observaciones y estado</summary>";
+  const fields=["oVariety","oStatus"].map(id=>$(id)?.parentElement).filter(Boolean);
   for(const field of fields) advanced.append(field);
   const notes=$("oNotes"),label=notes?.previousElementSibling;
   if(label)advanced.append(label);
@@ -238,6 +266,7 @@ function connectScope() {
     });
   }
   liveChannel.subscribe();
+  void retryOrders();
 }
 function hasDraft() {
   if (page === "pedidos") return Boolean(val("oProduct") || val("oBoxes") || val("oNotes"));
@@ -540,8 +569,38 @@ window.sg10ApplyRelease = async (button) => {
 
 const builtInRate = rate;
 rate = (client,product) => operations.configureRate(client,product) ?? builtInRate(client,product);
+const loadedCommission = purchase => commissionAmount(purchase,rate(name(purchase.clientId),purchase.product));
+window.sgCommissionMath = {amount:loadedCommission,euros:commissionEuros};
+window.sgExportCommission = exportCommission;
+window.sgShareCommission = index => shareCommission(index).catch(error=>toast(error.message));
+window.sgCommissionPeriod = commissionPeriod;
+function commissionDashboard() {
+  const day = today();
+  const totals = [["Hoy","day"],["Semana","week"],["Mes","month"],["Año","year"]].map(([label,period])=>{
+    const start = commissionPeriod(day,period);
+    const total = records.purchases.filter(({data})=>data.date>=start && data.date<=day)
+      .reduce((sum,{data})=>sum+loadedCommission(data),0n);
+    return '<div class="card"><h3>'+label+'</h3><strong>'+html(fmt(commissionEuros(total)))+'</strong></div>';
+  });
+  const lastDays = Array.from({length:7},(_,index)=>{
+    const date = new Date(day + "T12:00:00Z");
+    date.setUTCDate(date.getUTCDate() - 6 + index);
+    return date.toISOString().slice(0,10);
+  });
+  const daily = new Map(lastDays.map(date=>[date,0n]));
+  for (const {data} of records.purchases) {
+    if (daily.has(data.date)) daily.set(data.date,daily.get(data.date)+loadedCommission(data));
+  }
+  const values = [...daily].map(([date,total])=>[date,commissionEuros(total)]);
+  const maximum = Math.max(0.01,...values.map(([,value])=>value));
+  const chart = values.map(([date,value])=>'<li><span>'+html(date.slice(8)+'/'+date.slice(5,7))+'</span>'
+    +'<meter min="0" max="'+maximum+'" value="'+Math.max(0,value)+'" aria-label="Comisiones del '+date+'"></meter>'
+    +'<b>'+html(fmt(value))+'</b></li>').join("");
+  return '<div class="grid" aria-label="Comisiones de cargas registradas">'+totals.join("")+'</div>'
+    +'<div class="card"><h3>Evolución de comisiones · últimos 7 días</h3><ul class="sg-commission-chart">'+chart+'</ul></div>';
+}
 const originalCommissions = commissions;
-commissions = () => originalCommissions() + operations.commissionView({
+commissions = () => commissionDashboard() + originalCommissions() + operations.commissionView({
   client:sgComClient === null ? sgSelectedClient() : sgComClient,
   start:sgComDate || sgClientDate(),
   end:window.sgComEnd || sgComDate || sgClientDate(),
@@ -589,8 +648,14 @@ function assistantDraft(rows, selectedClient, date) {
     + '<button type="submit">Confirmar y guardar</button><p role="status"></p>';
   dialog.querySelector("[data-content]").append(form);
   const context = currentScope();
-  let requestId = crypto.randomUUID();
-  form.oninput = () => { requestId = crypto.randomUUID(); };
+  for (const row of form.querySelectorAll("fieldset")) {
+    const unit = row.querySelector('[name="unit"]');
+    const quantity = row.querySelector('[name="quantity"]');
+    if (unit.value) unit.dataset.manual = "1";
+    unit.onchange = () => { unit.dataset.manual = "1"; };
+    quantity.oninput = () => sgUnitAuto(quantity,unit);
+    sgUnitAuto(quantity,unit);
+  }
   orderDraft = {dialog, form};
   dialog.onclose = () => { orderDraft = null; dialog.remove(); };
   form.onsubmit = async (event) => {
@@ -608,15 +673,53 @@ function assistantDraft(rows, selectedClient, date) {
       return output.textContent = "Hay artículos repetidos. Revísalos.";
     event.submitter.disabled = true;
     try {
-      const { error } = await api.rpc("sg10_staff_order", {space:workspace,request:requestId,lines});
-      if (error) throw error;
-      await sync(true);
+      await recovery.submit("batch",lines);
+      if (context !== currentScope()) return;
+      await sync(true,true);
+      if (context !== currentScope()) return;
       dialog.close();
+      window.sgShowSavedOrders(clientId,date);
       answer(lines.length === 1 ? "Pedido guardado en Supabase." : lines.length + " artículos guardados en Supabase.");
       toast("Pedido guardado.");
     } catch (error) { output.textContent = error.message; }
     finally { event.submitter.disabled = false; }
   };
+}
+
+async function answerCommission(query, account) {
+  if (!/\b(comisiones?|liquidacion(?:es)?|ganado)\b/.test(query)) return false;
+  const period = /\b(ano|anual)\b/.test(query) ? "year" : /\bmes\b/.test(query) ? "month"
+    : /\bsemana\b/.test(query) ? "week" : "day";
+  const day = query.match(/\b20\d{2} \d{2} \d{2}\b/)?.[0].replaceAll(" ","-") || today();
+  const client = matchCompany(query,records.clients.map(row=>({id:row.id,name:d(row).name})));
+  const startsPeriod = commissionPeriod(day,period);
+  const taxable = /\b(ganado|cuanto|cuanta|comision(?:es)? de (?:hoy|esta semana|este mes|este ano))\b/.test(query);
+  if (/\bliquidacion(?:es)?\b/.test(query) && /\b(prepara\w*|muestra\w*|ensena\w*|abre|ver)\b/.test(query)) {
+    if (!client) answer("Indica qué empresa quieres revisar.");
+    else {
+      sgComClient = client;
+      sgComDate = startsPeriod;
+      window.sgComEnd = day;
+      go("comisiones");
+      answer("He abierto la relación de compras para revisar la liquidación de " + name(client) + ".");
+    }
+    return true;
+  }
+  if (!taxable || /\b(cobrado|cobradas?|debe|pendientes?|pagos?|previst[ao]s?)\b/.test(query)) return false;
+  const space = workspace;
+  let total = 0n;
+  for (let offset = 0;;offset += 500) {
+    let request = api.from("sg_purchases").select("id,data").eq("workspace_id",space)
+      .eq("data->>status","Cargado").gte("data->>date",startsPeriod).lte("data->>date",day);
+    if (client) request = request.eq("data->>clientId",client);
+    const {data,error} = await request.order("id").range(offset,offset+499);
+    if (account !== currentScope()) return true;
+    if (error) throw error;
+    total = data.reduce((sum,{data:purchase})=>sum+loadedCommission(purchase),total);
+    if (data.length < 500) break;
+  }
+  answer("La comisión sobre cargas confirmadas es " + fmt(commissionEuros(total)) + (client ? " para " + name(client) : "") + ".");
+  return true;
 }
 
 const legacySend = window.aguSend;
@@ -630,10 +733,11 @@ window.aguSend = async function () {
   busy = true;
   input.value = "";
   const account = currentScope();
-  const mode = isOrderRequest(text) ? "pedido" : "consulta";
-  const date = text.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? sgClientDate();
-  $("aguBubble").textContent = mode === "pedido" ? "Preparando el borrador…" : "Consultando los datos…";
+  const mode = isOrderRequest(text) && !/\b(liquidacion|factura|comisiones)\b/.test(query) ? "pedido" : "consulta";
+  const date = text.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? (mode === "pedido" ? sgClientDate() : today());
   try {
+    if (mode === "consulta" && await answerCommission(query,account)) return;
+    $("aguBubble").textContent = mode === "pedido" ? "Preparando el borrador…" : "Consultando los datos…";
     const result = await invoke(api,"sg10-aguacatin",{
       workspace,mode,text,date,history,deep:/\b(analiza|compara|incoherencia|discrepancia|explica|a fondo|detallado|resumen complejo)\b/.test(query),
     });

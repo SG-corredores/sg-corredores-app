@@ -90,3 +90,8 @@
 #purchaseSheet .purchase-company th{padding:.55rem .2rem .3rem;color:#27513c;border-bottom:1px solid #d6e2d9}
 
 #toast{pointer-events:none}
+
+.sg-commission-chart{list-style:none;padding:0;margin:0;max-width:38rem}
+.sg-commission-chart li{display:grid;grid-template-columns:3.1rem minmax(0,1fr) 6rem;align-items:center;gap:.65rem;margin:.3rem 0}
+.sg-commission-chart meter{width:100%;accent-color:#197142}
+.sg-commission-chart b{text-align:right}
