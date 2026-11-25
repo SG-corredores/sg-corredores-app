@@ -16,7 +16,7 @@
 <header>
   <div class="portal-header">
     <img alt="SG Corredores" src="./sg10/logotipo.png">
-    <div><strong>SG Corredores</strong><div>Zona Clientes</div></div>
+    <div class="portal-brand"><strong>Serrano Gago</strong><span>Zona Clientes</span></div>
     <div class="portal-session" id="session-tools" hidden>
       <button type="button" id="open-inbox" aria-expanded="false">🔔 Avisos</button>
       <button type="button" id="sign-out">Salir</button>
@@ -25,14 +25,23 @@
 </header>
 <main>
   <section class="panel" id="admin-preview" hidden><strong>Vista de administrador · Solo lectura</strong> <a href="./Index.html">Volver a SG Corredores</a></section>
-  <section class="panel portal-login" id="login">
-    <h1>Accede a tu empresa</h1>
-    <form id="login-form">
-      <label>Correo electrónico <input type="email" id="email" required autocomplete="email"></label>
-      <button>Enviar enlace de acceso</button>
-    </form>
-    <p>Usa el correo asociado a tu empresa.</p>
-  </section>
+  <div class="portal-entry">
+    <section class="portal-cover" aria-label="Serrano Gago Corredores">
+      <div class="portal-cover-copy">
+        <p>Corredores de frutas y verduras</p>
+        <h2>Siempre la máxima frescura y calidad</h2>
+      </div>
+      <img class="portal-cover-image" src="./sg10/portada-clientes.webp" alt="" width="1120" height="747" fetchpriority="high">
+    </section>
+    <section class="panel portal-login" id="login">
+      <h1>Accede a tu empresa</h1>
+      <p>Usa el correo asociado a tu empresa.</p>
+      <form id="login-form">
+        <label>Correo electrónico <input type="email" id="email" required autocomplete="email"></label>
+        <button>Enviar enlace de acceso</button>
+      </form>
+    </section>
+  </div>
   <p id="status" role="status" aria-live="polite"></p>
   <section id="portal" hidden>
     <section id="inbox" class="sg10-inbox" hidden aria-label="Avisos"></section>
@@ -44,7 +53,7 @@
       <a href="#galeria">Productos</a><a href="#pedidos" id="portal-order-link">Pedido</a>
       <a href="#history">Historial</a><a href="#facturas">Facturas</a><a href="#comisiones">Comisiones</a>
     </nav>
-    <section class="panel" id="galeria">
+    <section class="panel portal-products" id="galeria">
       <h2>Productos disponibles</h2>
       <div class="sg10-galleryrow" id="gallery-list" tabindex="0" aria-label="Fotos de productos"></div>
     </section>
@@ -52,7 +61,7 @@
       <h2>Nuevo pedido</h2>
       <label>Fecha de entrega <input type="date" id="order-date" required></label>
       <label>Texto del pedido <textarea id="source" rows="3" maxlength="5500" placeholder="10 cajas de tomate pera y 2 palés de patata"></textarea></label>
-      <div class="sg10-tools">
+      <div class="sg10-tools portal-order-actions">
         <button type="button" id="interpret">Interpretar texto con Aguacatín</button>
         <button type="button" id="dictate">Dictar pedido</button>
         <button type="button" id="add-line">Añadir artículo</button>

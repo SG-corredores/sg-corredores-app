@@ -1,9 +1,9 @@
-const CACHE = "sg10-shell-10.0.0-rc.6";
+const CACHE = "sg10-shell-10.0.0-rc.7";
 const base = self.registration.scope;
 const url = (path) => new URL(path,base).href;
 const shell = [
   "Index.html","portal.html","portal.webmanifest","manifest.webmanifest","sg10/common.js","sg10/staff.js","sg10/operations.js","sg10/walkie.js","sg10/portal.js",
-  "sg10/ui.css","sg10/portal.css","sg10/logotipo.png","sg10/aguacatin.png","icon-192.png","icon-512.png",
+  "sg10/ui.css","sg10/portal.css","sg10/logotipo.png","sg10/portada-clientes.webp","sg10/aguacatin.png","icon-192.png","icon-512.png",
 ];
 const allowed = new Set(shell.map(path => new URL(path,base).pathname));
 self.addEventListener("install", (event) => {
