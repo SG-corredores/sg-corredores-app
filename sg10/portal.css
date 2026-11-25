@@ -90,9 +90,27 @@ main { width: min(1112px, 100%); margin-inline: auto; padding: clamp(.75rem, 3vw
 #admin-preview a { color: var(--forest); font-weight: 650; }
 #status:empty { display: none; }
 #status:not(:empty) { padding: .8rem 1rem; border-radius: 10px; background: #e6eee4; }
-.portal-welcome { display: flex; justify-content: space-between; align-items: center; gap: .55rem 1rem; flex-wrap: wrap; padding: .15rem .2rem; }
-.portal-welcome h1 { margin: 0; font: 600 clamp(1.5rem, 4vw, 2.1rem)/1.15 var(--title); overflow-wrap: anywhere; }
-.portal-welcome label { margin: 0; }
+.portal-welcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: clamp(1rem, 3.2vw, 1.85rem);
+  background: linear-gradient(110deg, #fffefb 24%, #edf3e9);
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid #b9954e;
+  border-radius: 15px;
+  box-shadow: 0 4px 16px #123b270b;
+}
+.portal-welcome h1 {
+  flex: 1 1 15rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--forest);
+  font: 600 clamp(1.8rem, 5vw, 2.95rem)/1.12 var(--title);
+  overflow-wrap: anywhere;
+}
+.portal-welcome label { flex: 0 1 17rem; min-width: 0; margin: 0; color: var(--forest); }
 
 button { border: 0; background: #1c5939; color: #fff; border-radius: 8px; min-height: 44px; padding: .55rem .78rem; font: inherit; font-weight: 680; cursor: pointer; }
 button:hover:not(:disabled) { background: #14482e; }
