@@ -398,7 +398,21 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
 </script><script id="sg-gmail-connect">
 (function(){
  const originalSettings=settings;
- settings=function(){return originalSettings.apply(this,arguments)+(role==='owner'&&!user?.is_anonymous?`<div class="card"><h2>Gmail de empresa</h2><p>Autoriza la lectura del correo empresarial. No permite enviar ni borrar mensajes.</p><button type="button" class="primary" onclick="sgConnectGmail(this)">Conectar Gmail</button><p id="sgGmailStatus" role="status"></p></div>`:'');};
+ let gmailState=null;
+ settings=function(){return originalSettings.apply(this,arguments)+(role==='owner'&&user&&!user.is_anonymous?`<div class="card"><h2>Gmail de empresa</h2><p id="sgGmailStatus" role="status">${gmailState?.uid===user.id?'Conexión comprobada en esta sesión.':'Pendiente de comprobar conexión.'}</p><button type="button" class="primary" onclick="sgCheckGmail(this)">Comprobar Gmail</button> <button type="button" onclick="sgConnectGmail(this)">Volver a autorizar</button><p id="sgGmailCount">${gmailState?.uid===user.id?'Correos candidatos: '+gmailState.count+(gmailState.more?' (hay más)':''):''}</p><p>Facturas, abonos, kilos netos y comisiones: pendientes de implementar la extracción de documentos. No se contabilizan correos como facturas.</p></div>`:'');};
+ window.sgCheckGmail=async function(button){
+ const status=document.getElementById('sgGmailStatus');const count=document.getElementById('sgGmailCount');
+ button.disabled=true;status.textContent='Comprobando Gmail…';count.textContent='';gmailState=null;
+ try{if(role!=='owner'||!user||user.is_anonymous)throw Error('Acceso exclusivo del propietario.');
+ const uid=user.id;const {data,error}=await api.auth.getSession();if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
+ const r=await api.functions.invoke('sg-gmail-reader',{body:{},headers:{Authorization:'Bearer '+data.session.access_token}});
+ if(r.error){let detail;try{detail=await r.error.context?.json()}catch(_){}throw Error(detail?.error||r.error.message);}
+ if(!r.data?.ok||r.data.cuenta?.toLowerCase()!=='serranogagocopias@gmail.com'||!Number.isInteger(r.data.documentos_candidatos))throw Error('Respuesta de Gmail no válida.');
+ if(user?.id!==uid||role!=='owner')return;
+ gmailState={uid,count:r.data.documentos_candidatos,more:!!r.data.hay_mas};status.textContent='Gmail conectado: '+r.data.cuenta;count.textContent='Correos candidatos en los últimos 30 días: '+gmailState.count+(gmailState.more?' (hay más)':'')+'. No son facturas verificadas.';
+ }catch(e){status.textContent='No se pudo comprobar: '+e.message;}finally{button.disabled=false;}
+ };
+
  window.sgConnectGmail=async function(button){
  const status=document.getElementById('sgGmailStatus');
  button.disabled=true;
