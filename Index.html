@@ -184,7 +184,11 @@ function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> 
 function exportData(){let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),workspace,records},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Corredores_'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguacatín al habla! ¡Hoy repartimos frescura!','¡Vamos, equipo! ¡Las sandías no se venden solas!','¡Buenos días! ¡A por una jornada de fruta y verdura!','¡Que hoy salgan las cajas como churros!'];
 function dance(){let a=$('avo');if(!a)return;a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
-function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.0;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
+function aguacatin(silent=false){
+ const phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();
+ if(!silent)toast(phrase);
+ if(!$('aguFloat').classList.contains('aguExpanded'))window.sgVoiceSay?.(phrase);
+}
 async function init(){
  const callback=new URL(location.href);
  const fragment=new URLSearchParams(callback.hash.slice(1));
@@ -207,7 +211,14 @@ async function init(){
 <script>
 const aguPhrases=['¡Aquí estoy, más fresco que una lechuga con aire acondicionado!','¡Hoy vendemos hasta las pepitas de la sandía!','¡Los tomates están rojos de ver cuánto trabajamos!','¡Que no se nos duerma ni una alcachofa!','¡A vender, que las cajas no se mueven solas!','¡Estoy tan en forma que hasta los pepinos me tienen envidia!','¡Cuidado con las cebollas, que hoy no estamos para llorar!','¡Vamos al lío, que los melones no se colocan solos!'];
 let aguLast=-1;
-function aguSay(s){let i;if(s){$('aguLine').textContent=s}else{do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);aguLast=i;$('aguLine').textContent=aguPhrases[i]}if('speechSynthesis'in window){speechSynthesis.cancel();let vozTexto=$('aguLine').textContent.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/\s+/g,' ').trim();if(vozTexto){let u=new SpeechSynthesisUtterance(vozTexto);u.lang='es-ES';u.pitch=1.0;u.rate=1.12;if(!window.sgVoiceInterrupt) speechSynthesis.speak(u)}}}
+function aguSay(s){
+ if(s){$('aguLine').textContent=s;return;}
+ let i;
+ do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);
+ aguLast=i;
+ $('aguLine').textContent=aguPhrases[i];
+ window.sgVoiceSay?.($('aguLine').textContent);
+}
 function openAgu(){$('aguModal').style.display='flex';aguSay()}
 function closeAgu(){$('aguModal').style.display='none';if('speechSynthesis'in window)speechSynthesis.cancel()}
 function sgArticleAnswer(raw){
@@ -298,6 +309,7 @@ window.aguSend=async function(){
 #aguAvatar{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;cursor:grab!important}
 #aguAvatar img{pointer-events:none!important;-webkit-user-drag:none!important}
 #aguFloat.aguDragging{transition:none!important;z-index:9999!important}
+#aguFloat.aguHolding #aguAvatar{animation-play-state:paused!important}
 #aguFloat.aguDragging #aguAvatar{animation:none!important;cursor:grabbing!important}
 </style>
 <script id="agu-drag-fix-v2-js">
@@ -311,15 +323,14 @@ function locate(x,y){if(flo.classList.contains('aguExpanded'))return;const w=av.
  flo.style.right='auto';flo.style.bottom='auto';
  flo.style.alignItems='center';}
 function save(){const r=flo.getBoundingClientRect();try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(e){}}
-function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging')}
+function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging','aguHolding')}
 try{const v=JSON.parse(localStorage.getItem(key));if(v&&Number.isFinite(v.x)&&Number.isFinite(v.y))requestAnimationFrame(()=>locate(v.x,v.y))}catch(e){}
 av.addEventListener('contextmenu',e=>e.preventDefault());
-av.addEventListener('pointerdown',e=>{
- if(down||e.button!==0)return;
+function begin(id,x,y,expanded){
+ const r=flo.getBoundingClientRect();
  blockClick=false;
- const r=flo.getBoundingClientRect(),expanded=flo.classList.contains('aguExpanded');
- down={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,expanded};
- try{av.setPointerCapture(e.pointerId)}catch{}
+ down={id,x,y,left:r.left,top:r.top,expanded};
+ if(expanded)flo.classList.add('aguHolding');
  timer=setTimeout(()=>{
   if(!down||flo.classList.contains('aguExpanded')!==expanded)return;
   blockClick=true;
@@ -328,22 +339,54 @@ av.addEventListener('pointerdown',e=>{
   flo.classList.add('aguDragging');
   navigator.vibrate?.(25);
  },expanded?2000:300);
-},{capture:true});
+}
+function move(x,y){
+ const dx=x-down.x,dy=y-down.y;
+ if(!holding){if(Math.hypot(dx,dy)>(down.expanded?28:14)){clearTimeout(timer);blockClick=true}return}
+ if(!flo.classList.contains('aguExpanded'))locate(down.left+dx,down.top+dy);
+}
+av.addEventListener('pointerdown',e=>{
+ const expanded=flo.classList.contains('aguExpanded');
+ if(down||e.button!==0||(expanded&&e.pointerType==='touch'))return;
+ begin(e.pointerId,e.clientX,e.clientY,expanded);
+ try{av.setPointerCapture(e.pointerId)}catch{}
+});
 av.addEventListener('pointermove',e=>{
  if(!down||e.pointerId!==down.id)return;
- const dx=e.clientX-down.x,dy=e.clientY-down.y;
- if(!holding){if(Math.hypot(dx,dy)>14){clearTimeout(timer);blockClick=true}return}
- if(flo.classList.contains('aguExpanded'))return;
- e.preventDefault();locate(down.left+dx,down.top+dy);
-},{passive:false,capture:true});
+ if(holding)e.preventDefault();
+ move(e.clientX,e.clientY);
+});
 function end(e){
  if(!down||e.pointerId!==down.id)return;
  if(holding)save();
  release();
 }
-av.addEventListener('pointerup',end,{capture:true});
-av.addEventListener('pointercancel',end,{capture:true});
-av.addEventListener('lostpointercapture',end,{capture:true});
+av.addEventListener('pointerup',end);
+av.addEventListener('pointercancel',end);
+av.addEventListener('lostpointercapture',end);
+av.addEventListener('touchstart',e=>{
+ if(!flo.classList.contains('aguExpanded')||e.touches.length!==1)return;
+ e.preventDefault();
+ const touch=e.changedTouches[0];
+ if(down)return;
+ begin('touch-'+touch.identifier,touch.clientX,touch.clientY,true);
+},{passive:false});
+av.addEventListener('touchmove',e=>{
+ if(!down)return;
+ const touch=Array.from(e.changedTouches).find(t=>down.id==='touch-'+t.identifier);
+ if(!touch)return;
+ e.preventDefault();
+ move(touch.clientX,touch.clientY);
+},{passive:false});
+function endTouch(e){
+ if(!down||!Array.from(e.changedTouches).some(t=>down.id==='touch-'+t.identifier))return;
+ const tap=e.type==='touchend'&&!blockClick;
+ if(e.cancelable)e.preventDefault();
+ release();
+ if(tap)window.openAgu();
+}
+av.addEventListener('touchend',endTouch,{passive:false});
+av.addEventListener('touchcancel',endTouch);
 window.addEventListener('blur',release);
 av.addEventListener('click',e=>{
  if(blockClick&&e.detail!==0){e.preventDefault();e.stopImmediatePropagation();blockClick=false}
@@ -515,19 +558,10 @@ savePurchase=async function(){if(page==='compras'&&$('pOrder')&&$('pProduct').pa
   const previousAsk = askAgu;
   let busy = false;
   const el = id => document.getElementById(id);
-  function speechText(t){return String(t||'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/\*\*|__|[`*_#~]/g,'').replace(/https?:\/\/\S+/g,'').trim();}
-  function display(t, speak=false){
+  function display(t){
     const message=String(t||'').trim();
     if(el('aguLine'))el('aguLine').textContent=message;
     if(el('aguBubble'))el('aguBubble').textContent=message;
-    if(el('aguFloat'))el('aguFloat').classList.add('aguExpanded');
-    if(el('aguControls'))el('aguControls').hidden=false;
-    if(speak&&message&&'speechSynthesis' in window){
-      speechSynthesis.cancel();
-      const utterance=new SpeechSynthesisUtterance(speechText(message));
-      utterance.lang='es-ES';utterance.pitch=1.0;utterance.rate=1.06;
-      if(!window.sgVoiceInterrupt) speechSynthesis.speak(utterance);
-    }
   }
   function isOrderCommand(t){
     const q=norm(t).trim();
@@ -657,7 +691,7 @@ window.sgExtra=function(p){if(p!=='pales')return origExtra(p);const date=current
 (()=>{'use strict';
 /* Aguacatín 2.0: contextual read-only logistics queries. No data mutations. */
 const normalize=t=>String(t||'').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();
-const say=t=>{const b=document.getElementById('aguBubble'),l=document.getElementById('aguLine');if(b)b.textContent=t;if(l)l.textContent=t;document.getElementById('aguFloat')?.classList.add('aguExpanded');if(document.getElementById('aguControls'))document.getElementById('aguControls').hidden=false;if(typeof aguSay==='function')aguSay(t)};
+const say=t=>{const b=document.getElementById('aguBubble'),l=document.getElementById('aguLine');if(b)b.textContent=t;if(l)l.textContent=t;if(typeof aguSay==='function')aguSay(t)};
 let lastClient='',lastDate='',lastResponse='',busy=false;
 const d=r=>r?.data||{};
 function getDate(t){const z=normalize(t),now=new Date();if(z.includes('mañana'))now.setDate(now.getDate()+1);else if(z.includes('ayer'))now.setDate(now.getDate()-1);const m=t.match(/\b(20\d\d)-(\d\d)-(\d\d)\b/);return m?m[0]:[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')}
@@ -710,7 +744,7 @@ const bubble=document.getElementById('aguBubble'),controls=document.getElementBy
 if(!bubble||!controls)return;
 document.getElementById('sgVoicePanel')?.remove();
 const panel=document.createElement('div');panel.id='sgVoicePanel';
-panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz natural activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="cheerful">🥑 Aguacatín alegre</option><option value="natural">Natural</option></select>';
+panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz natural activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><button type="button" id="sgVoiceSample">Probar voz</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="cheerful">🥑 Aguacatín alegre</option><option value="natural">Natural</option></select>';
 const settingsContent=document.getElementById('content');
 function mountVoiceSettings(){
  const slot=document.getElementById('sgAguVoiceSettings');
@@ -719,44 +753,47 @@ function mountVoiceSettings(){
 new MutationObserver(mountVoiceSettings).observe(settingsContent,{childList:true});
 mountVoiceSettings();
 const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),style=panel.querySelector('#sgVoiceVoice');
-let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',last='',serial=0,audio=null,objectUrl=null;
+let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',serial=0,audio=null,objectUrl=null,debounce,controller;
 function refresh(){toggle.textContent=enabled?'🔊 Voz natural activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
-function halt(){serial++;try{audio?.pause();if(audio)audio.src='';}catch{}audio=null;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;try{speechSynthesis.cancel()}catch{}}
+function halt(){serial++;clearTimeout(debounce);controller?.abort();controller=null;if(audio){audio.pause();audio.removeAttribute('src');audio=null;}if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;}
 window.sgVoiceInterrupt=halt;
 function clean(s){return String(s||'').replace(/https?:\/\/\S+/g,'enlace').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim().slice(0,1800)}
 async function say(raw){
  const text=clean(raw);
- if(!enabled||!text||/^(He oído:|Consultando|Te escucho|🎙|¡Aquí estoy!)/i.test(text)){window.sgConversationResume?.();return;}
- last=text;halt();window.sgConversationPause?.();const request=serial;const watchdog=setTimeout(()=>{if(request===serial&&!audio){halt();window.sgConversationResume?.();}},12000);
+ if(!enabled||!text||/^(He oído:|Consultando|Preparando el borrador|Te escucho|🎙|¡Aquí estoy!)/i.test(text)){window.sgConversationResume?.();return;}
+ halt();window.sgConversationPause?.();const request=serial;const abort=new AbortController();controller=abort;const watchdog=setTimeout(()=>abort.abort(),12000);
  try{
   const base=(typeof config!=='undefined'&&config.url)||'';
   const key=(typeof config!=='undefined'&&config.key)||'';
   if(!base||!key||typeof api==='undefined'||!api)throw Error('Sin conexión');
   const {data:{session}}=await api.auth.getSession();
   if(!session?.access_token)throw Error('Inicia sesión');
+  if(request!==serial)return;
   const response=await fetch(base.replace(/\/$/,'')+'/functions/v1/sg-aguacatin-voz',{
-   method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+session.access_token},
+   method:'POST',cache:'no-store',signal:abort.signal,headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+session.access_token},
    body:JSON.stringify({text,style:style.value})
   });
   if(!response.ok)throw Error('Voz no disponible ('+response.status+')');
-  const blob=await response.blob();clearTimeout(watchdog);if(request!==serial)return;
+  const blob=await response.blob();if(request!==serial)return;
   objectUrl=URL.createObjectURL(blob);audio=new Audio(objectUrl);audio.playbackRate=Number(rate.value)||1;audio.preservesPitch=true;toggle.textContent='🔊 Voz Supabase activa';
-  audio.onended=()=>{if(request===serial){URL.revokeObjectURL(objectUrl);objectUrl=null;audio=null;window.sgConversationResume?.();}};audio.onerror=()=>{if(request===serial)window.sgConversationResume?.();};
+  const finish=()=>{if(request===serial){halt();window.sgConversationResume?.();}};
+  audio.onended=finish;audio.onerror=finish;
   await audio.play();
  }catch(e){
   if(request!==serial)return;
-  clearTimeout(watchdog);console.warn('Aguacatín: voz natural',e);
+  halt();console.warn('Aguacatín: voz natural',e);
   // Si falla el servicio, mostrar el fallo en el botón en vez de fingir que la voz es natural.
   toggle.textContent='⚠️ Voz natural no disponible';window.sgConversationResume?.();
- }
+ }finally{clearTimeout(watchdog);}
 }
+window.sgVoiceSay=say;
 refresh();
-toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));halt();last='';refresh();if(!enabled)window.sgConversationResume?.()});
-stop.addEventListener('click',()=>{window.sgConversationStop?.();halt();last=''});
-let debounce;
-new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>{const t=bubble.textContent.trim();if(t)say(t)},80)}).observe(bubble,{childList:true,characterData:true,subtree:true});
+toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));halt();refresh();if(!enabled)window.sgConversationResume?.()});
+stop.addEventListener('click',()=>{window.sgConversationStop?.();halt()});
+panel.querySelector('#sgVoiceSample').addEventListener('click',()=>say('¡Buenas, equipo! Soy Aguacatín. Hoy no se nos escapa ni un tomate.'));
+new MutationObserver(()=>{clearTimeout(debounce);if(!controls.hidden)debounce=setTimeout(()=>{if(!controls.hidden)say(bubble.textContent)},80)}).observe(bubble,{childList:true,characterData:true,subtree:true});
 const oldListen=window.aguListen;
-if(typeof oldListen==='function')window.aguListen=function(){halt();last='';return oldListen.apply(this,arguments)};
+if(typeof oldListen==='function')window.aguListen=function(){halt();return oldListen.apply(this,arguments)};
 })();
 </script>
 <script id="sg-agu-operativo">
@@ -764,7 +801,7 @@ if(typeof oldListen==='function')window.aguListen=function(){halt();last='';retu
 const oldSend=window.aguSend,oldAsk=window.askAgu;
 let busy=false,pending=null;
 const n=s=>norm(s).replace(/\s+/g,' ');
-const say=s=>{ $('aguBubble').textContent=s; $('aguLine').textContent=s; $('aguFloat').classList.add('aguExpanded'); $('aguControls').hidden=false; };
+const say=s=>{ $('aguBubble').textContent=s; $('aguLine').textContent=s; };
 const number=s=>Number(s.replace(',','.'));
 async function handle(raw){
  const q=n(raw).replace(/^(?:oye\s+)?aguacatin[, ]*/,'');
