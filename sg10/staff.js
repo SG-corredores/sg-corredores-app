@@ -1,5 +1,5 @@
 import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=palets";
-import { installWalkie } from "./walkie.js";
+import { installWalkie } from "./walkie.js?v=supabase";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
 window.sg10PalletText = formatPallets;
