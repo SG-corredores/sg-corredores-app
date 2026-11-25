@@ -244,13 +244,13 @@ window.sgDemoCancel=function(){draft=null;show('Borrador descartado. No se ha mo
 <script id="agu-drag-fix-v2-js">
 (function(){'use strict';
 const flo=document.getElementById('aguFloat'),av=document.getElementById('aguAvatar');if(!flo||!av)return;
-const key='sg_aguacatin_position_v2';let down=null,holding=false,moved=false,timer=null,blockClick=false;
+const key='sg_aguacatin_position_v3';let down=null,holding=false,moved=false,timer=null,blockClick=false;
 function bound(n,min,max){return Math.min(Math.max(n,min),Math.max(min,max))}
-function locate(x,y){const r=flo.getBoundingClientRect();const w=r.width||75,h=r.height||104;
- flo.style.setProperty('left',bound(x,4,innerWidth-w-4)+'px','important');
- flo.style.setProperty('top',bound(y,4,innerHeight-h-4)+'px','important');
- flo.style.setProperty('right','auto','important');flo.style.setProperty('bottom','auto','important');
- flo.style.setProperty('align-items','flex-start','important');}
+function locate(x,y){if(flo.classList.contains('aguExpanded'))return;const w=av.offsetWidth||75,h=av.offsetHeight||104;const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+ flo.style.left=bound(x,8,vw-w-8)+'px';
+ flo.style.top=bound(y,8,vh-h-8)+'px';
+ flo.style.right='auto';flo.style.bottom='auto';
+ flo.style.alignItems='center';}
 function save(){const r=flo.getBoundingClientRect();try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(e){}}
 function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging')}
 try{const v=JSON.parse(localStorage.getItem(key));if(v&&Number.isFinite(v.x)&&Number.isFinite(v.y))requestAnimationFrame(()=>locate(v.x,v.y))}catch(e){}
@@ -269,7 +269,8 @@ function end(e){if(!down||e.pointerId!==down.id)return;const wasHold=holding;
  release();}
 av.addEventListener('pointerup',end,{capture:true});av.addEventListener('pointercancel',end,{capture:true});
 av.addEventListener('click',e=>{if(blockClick){e.preventDefault();e.stopImmediatePropagation();blockClick=false}},{capture:true});
-window.addEventListener('resize',()=>{if(flo.style.left&&!flo.classList.contains('aguExpanded')){const r=flo.getBoundingClientRect();locate(r.left,r.top)}});
+function clampPosition(){if(!flo.classList.contains('aguExpanded')&&flo.style.left){locate(parseFloat(flo.style.left)||0,parseFloat(flo.style.top)||0)}}
+window.addEventListener('resize',clampPosition);window.visualViewport?.addEventListener('resize',clampPosition);new MutationObserver(clampPosition).observe(flo,{attributes:true,attributeFilter:['class']});
 })();
 </script>
 <script>
@@ -841,4 +842,6 @@ const nav=$('nav'),b=document.createElement('button');b.textContent='Mi compra';
 #aguFloat.aguExpanded #aguWave{margin-right:0}
 #aguFloat.aguExpanded #aguControls .aguClose{align-self:flex-end}
 </style>
-</body></html>
+<style id="sg-viewport-fix">
+html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-width:100%}#nav{overflow-x:auto}#aguFloat:not(.aguExpanded){width:75px;max-width:75px;align-items:center;transform:none}#aguFloat:not(.aguExpanded) #aguAvatar{width:75px;height:104px;flex:none;transition:none}#aguFloat.aguExpanded #aguControls{min-width:0;max-width:100%}#aguFloat.aguExpanded #aguBubble{overflow-wrap:anywhere}
+</style></body></html>
