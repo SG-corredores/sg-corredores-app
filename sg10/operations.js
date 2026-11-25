@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, esc, invoke, normalized, readPallets, validNumber } from "./common.js";
+import { prepareWhatsAppInvite, esc, invoke, normalized, readPallets, validNumber } from "./common.js?v=whatsapp-directo";
 
 const formatting = new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
 const number = (value) => typeof value === "number" && Number.isFinite(value);
@@ -623,17 +623,41 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     }
     const form = document.createElement("form");
     form.innerHTML = '<label>Empresa <select name="company" required><option value="">Elige una empresa</option>'
-      + renderOptions(records.clients) + '</select></label><button type="submit">Ver Zona Clientes</button>';
+      + renderOptions(records.clients) + '</select></label><div class="sg10-tools"><button type="submit">Ver Zona Clientes</button>'
+      + '<button type="button" data-whatsapp>Invitar por WhatsApp</button></div><p data-status role="status"></p>';
     content.append(form);
+    const message = form.querySelector("[data-status]");
+    setupClientWhatsApp(form,message);
+    form.elements.company.onchange = () => {message.textContent = "";};
     form.onsubmit = (event) => {
       event.preventDefault();
-      if (!roleOwner() || state().workspace !== workspace) return;
+      if (!roleOwner() || state().workspace !== workspace || form.elements.company.disabled) return;
       const target = new URL("./portal.html",location.href);
       target.searchParams.set("vista",form.elements.company.value);
       target.searchParams.set("empresa",workspace);
       location.assign(target.href);
     };
   }
+  function setupClientWhatsApp(form,message) {
+    const companyField = form.elements.company;
+    const button = form.querySelector("[data-whatsapp]");
+    button.onclick = async () => {
+      if (!roleOwner() || !companyField.reportValidity()) return;
+      const {api,workspace} = state();
+      const company = companyField.value;
+      button.disabled = true;
+      companyField.disabled = true;
+      try {
+        await prepareWhatsAppInvite(api,workspace,null,company,message);
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        companyField.disabled = false;
+        button.disabled = false;
+      }
+    };
+  }
+
   function clientForm() {
     if(!roleOwner())return;
     const dialog=openDialog("Accesos de la empresa");
@@ -671,17 +695,10 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       message.textContent="";
       void membersList();
     };
-    form.querySelector("[data-whatsapp]").onclick=async ({currentTarget:button})=>{
-      if(!form.reportValidity())return;
-      const {api,workspace}=state();
-      const company=form.elements.company.value;
-      button.disabled=true;
-      try{await prepareWhatsAppInvite(api,workspace,form.elements.email.value.trim(),company,message);}
-      catch(error){message.textContent=error.message;}
-      finally{button.disabled=false;}
-    };
+    setupClientWhatsApp(form,message);
     form.onsubmit=async event=>{
       event.preventDefault();
+      if(form.elements.company.disabled)return;
       const email=form.elements.email.value.trim();
       if(!confirm("¿Autorizar el acceso de "+email+" a la empresa seleccionada?"))return;
       event.submitter.disabled=true;form.elements.company.disabled=true;

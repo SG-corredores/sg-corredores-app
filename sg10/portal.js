@@ -1,5 +1,5 @@
 import { installCarousel } from "./portal-carousel.js";
-import { openInvitation, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js";
+import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js?v=whatsapp-directo";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
@@ -27,7 +27,8 @@ const refreshCarousel = installCarousel(element("gallery-list"),element("gallery
 const params = new URLSearchParams(location.search);
 const previewMode = params.has("vista") || params.has("empresa");
 const previewMembership = previewMode ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
-const invitation = previewMode ? null : openInvitation("portal");
+const directToken = previewMode ? null : directInviteToken();
+const invitation = previewMode || directToken ? null : openInvitation("portal");
 let config = publicConfig;
 if (previewMode) {
   try { config = { ...publicConfig, ...JSON.parse(localStorage.getItem("sg_config_v7")) }; } catch {}
@@ -375,4 +376,27 @@ setInterval(() => {
   if (!document.hidden && membership) Promise.all([refresh(),loadGallery()]).catch(error => status(error.message));
 },45_000);
 navigator.serviceWorker?.register("./sw.js").catch(() => {});
-connect().catch(error => status(error.message));
+if (directToken) {
+  const button = element("activate-client");
+  element("login").hidden = true;
+  element("client-invitation").hidden = false;
+  button.onclick = async () => {
+    if (button.disabled) return;
+    if (!api) return status("No se pudo cargar la conexión.");
+    button.disabled = true;
+    status("Activando acceso…");
+    try {
+      await redeemDirectInvite(api,directToken,true);
+      localStorage.removeItem("sg10-portal-invite");
+      await connect();
+      history.replaceState(null,"",location.pathname + location.search);
+      status("");
+    } catch (error) {
+      status(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+} else {
+  connect().catch(error => status(error.message));
+}

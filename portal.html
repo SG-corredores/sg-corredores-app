@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./sg10/ui.css">
   <link rel="stylesheet" href="./sg10/portal.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
-  <script type="module" src="./sg10/portal.js"></script>
+  <script type="module" src="./sg10/portal.js?v=whatsapp-directo"></script>
 </head>
 <body>
 <header>
@@ -32,6 +32,12 @@
         <h2>Siempre la máxima frescura y calidad</h2>
       </div>
       <img class="portal-cover-image" src="./sg10/portada-clientes.webp" alt="" width="1120" height="747" fetchpriority="high">
+    </section>
+    <section class="panel portal-login" id="client-invitation" hidden>
+      <h1>Invitación a Zona Clientes</h1>
+      <p>Activa el acceso a tu empresa en este navegador.</p>
+      <button type="button" id="activate-client">Activar acceso</button>
+      <p><a href="./portal.html?acceso=1">Volver al inicio de sesión</a></p>
     </section>
     <section class="panel portal-login" id="login">
       <h1>Accede a tu empresa</h1>

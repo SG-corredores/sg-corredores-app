@@ -209,6 +209,29 @@ export function openInvitation(surface) {
   return { key, token: localStorage.getItem(key) };
 }
 
+export function directInviteToken(fragment = new URLSearchParams(location.hash.slice(1))) {
+  const token = fragment.get("sg-acceso");
+  return /^[a-f0-9]{64}$/.test(token ?? "") ? token : null;
+}
+
+export async function redeemDirectInvite(api, token, customer) {
+  const existing = await api.auth.getSession();
+  if (existing.error) throw existing.error;
+  let session = existing.data.session;
+  if (session && !session.user.is_anonymous) {
+    throw Error("Ya hay una cuenta con correo abierta aquí. Abre la invitación en otro navegador.");
+  }
+  if (!session) {
+    const login = await api.auth.signInAnonymously();
+    if (login.error) throw login.error;
+    session = login.data.session;
+    if (!session) throw Error("No se pudo activar el acceso. Inténtalo de nuevo.");
+  }
+  const {error} = await api.rpc("sg10_redeem_direct_whatsapp_invite", {p_token:token,p_customer:customer});
+  if (error) throw error;
+  return session.user;
+}
+
 export async function prepareWhatsAppInvite(api, workspace, email, company, target) {
   target.textContent = "Preparando invitación…";
   // Open during the tap, before waiting for the invitation token.
@@ -227,17 +250,21 @@ export async function prepareWhatsAppInvite(api, workspace, email, company, targ
 
   let opened = false;
   try {
-    const {data: token, error} = await api.rpc("sg10_create_whatsapp_invite", {
-      p_workspace: workspace, p_email: email, p_client: company,
-    });
+    const direct = email === null;
+    const {data: token, error} = await (direct
+      ? api.rpc("sg10_create_direct_whatsapp_invite", {p_workspace:workspace,p_client:company})
+      : api.rpc("sg10_create_whatsapp_invite", {p_workspace:workspace,p_email:email,p_client:company}));
     if (error) throw error;
     if (!/^[a-f0-9]{64}$/.test(token ?? "")) throw Error("No se pudo generar la invitación.");
     if (!target.isConnected) return;
 
     const invitation = new URL(company === null ? "./Index.html" : "./portal.html", location.href);
-    invitation.hash = "sg-invitacion=" + token;
+    invitation.hash = (direct ? "sg-acceso=" : "sg-invitacion=") + token;
+    const instructions = direct
+      ? "Abre el enlace en tu móvil y pulsa Activar acceso. El enlace caduca en 7 días y solo se puede usar una vez."
+      : "Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.";
     const text = "SG Corredores te invita a " + (company === null ? "la app de empleados" : "la Zona Clientes")
-      + ". Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.\n" + invitation.href;
+      + ". " + instructions + "\n" + invitation.href;
 
     const share = document.createElement("a");
     share.href = "https://wa.me/?text=" + encodeURIComponent(text);

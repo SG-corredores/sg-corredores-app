@@ -1,6 +1,6 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, matchCompany, normalized, readPallets, readRelease, validNumber, version } from "./common.js";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, matchCompany, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=whatsapp-directo";
 import { installWalkie } from "./walkie.js";
-import { installOperations } from "./operations.js";
+import { installOperations } from "./operations.js?v=whatsapp-directo";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -479,11 +479,11 @@ window.sgExtra = function (target) {
 };
 
 window.sg10InviteStaffWhatsApp = async (button) => {
-  if (role !== "owner" || user?.is_anonymous || !button.form?.reportValidity()) return;
-  const result = $("sgInviteStatus");
+  if (role !== "owner" || !user || user.is_anonymous) return;
+  const result = $("sgWhatsAppInviteStatus");
   button.disabled = true;
   try {
-    await prepareWhatsAppInvite(api,workspace,val("sgInviteEmail"),null,result);
+    await prepareWhatsAppInvite(api,workspace,null,null,result);
   } catch (error) {
     result.textContent = error.message;
   } finally {

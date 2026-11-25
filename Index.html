@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123b27"><title>SG Corredores</title><link rel="stylesheet" href="./sg10/ui.css"><link rel="icon" type="image/png" href="./sg10/logotipo.png"><link rel="apple-touch-icon" href="./sg10/logotipo.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f2f6f1;color:#24382b;font:16px system-ui,Arial}header{background:#123b27;color:white;padding:17px}header h1{margin:0;font-size:25px}header small{color:#c5e9d1}nav{display:flex;overflow-x:auto;gap:7px;background:#dbeadd;padding:10px}button{border:0;border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer}nav button{white-space:nowrap;background:white}.primary,nav .active{background:#167a43;color:white}.secondary{background:#e4eee6;color:#20583a}.danger{background:#ffe3e3;color:#a22}main{max-width:900px;margin:auto;padding:14px 14px 100px}.card{background:white;border-radius:13px;padding:17px;margin-bottom:13px;box-shadow:0 2px 8px #0001}h2{font-size:21px;color:#155e36;margin:0 0 12px}h3{margin:4px 0 9px}label{display:block;font-size:14px;font-weight:700;margin:10px 0 5px}input,select,textarea{display:block;width:100%;font:16px system-ui;padding:11px;border:1px solid #c9d5cc;border-radius:8px;background:white}textarea{min-height:70px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}@media(max-width:580px){.grid{grid-template-columns:1fr}}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.item{padding:12px 0;border-bottom:1px solid #e6ece7}.item:last-child{border:0}.muted{font-size:13px;color:#66796d}.big{font-size:27px;font-weight:800;color:#167a43}.pill{display:inline-block;background:#e7f2e9;border-radius:15px;padding:4px 8px;font-size:12px}#login{max-width:470px;margin:25px auto;padding:12px}#app{display:none}#toast{position:fixed;bottom:14px;left:12px;right:12px;padding:14px;background:#153c28;color:white;border-radius:11px;display:none;z-index:20}#avo{position:fixed;right:15px;bottom:15px;background:#add46b;border:3px solid #285e34;border-radius:50%;height:72px;width:72px;font-size:38px;z-index:10}#avo.dance{animation:dance .3s alternate 6}@keyframes dance{to{transform:rotate(19deg) translateY(-12px)}from{transform:rotate(-19deg)}}.hidden{display:none}
+*{box-sizing:border-box}body{margin:0;background:#f2f6f1;color:#24382b;font:16px system-ui,Arial}header{background:#123b27;color:white;padding:17px}header h1{margin:0;font-size:25px}header small{color:#c5e9d1}nav{display:flex;overflow-x:auto;gap:7px;background:#dbeadd;padding:10px}button{border:0;border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer}nav button{white-space:nowrap;background:white}.primary,nav .active{background:#167a43;color:white}.secondary{background:#e4eee6;color:#20583a}.danger{background:#ffe3e3;color:#a22}main{max-width:900px;margin:auto;padding:14px 14px 100px}.card{background:white;border-radius:13px;padding:17px;margin-bottom:13px;box-shadow:0 2px 8px #0001}h2{font-size:21px;color:#155e36;margin:0 0 12px}h3{margin:4px 0 9px}label{display:block;font-size:14px;font-weight:700;margin:10px 0 5px}input,select,textarea{display:block;width:100%;font:16px system-ui;padding:11px;border:1px solid #c9d5cc;border-radius:8px;background:white}textarea{min-height:70px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}@media(max-width:580px){.grid{grid-template-columns:1fr}}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.item{padding:12px 0;border-bottom:1px solid #e6ece7}.item:last-child{border:0}.muted{font-size:13px;color:#66796d}.big{font-size:27px;font-weight:800;color:#167a43}.pill{display:inline-block;background:#e7f2e9;border-radius:15px;padding:4px 8px;font-size:12px}#login,#sgStaffActivation{max-width:470px;margin:25px auto;padding:12px}#app{display:none}#toast{position:fixed;bottom:14px;left:12px;right:12px;padding:14px;background:#153c28;color:white;border-radius:11px;display:none;z-index:20}#avo{position:fixed;right:15px;bottom:15px;background:#add46b;border:3px solid #285e34;border-radius:50%;height:72px;width:72px;font-size:38px;z-index:10}#avo.dance{animation:dance .3s alternate 6}@keyframes dance{to{transform:rotate(19deg) translateY(-12px)}from{transform:rotate(-19deg)}}.hidden{display:none}
 </style><style>
 header{background:linear-gradient(120deg,#075d2a,#05953c);border-radius:0 0 30px 30px;padding:22px 20px 28px}
 header h1{font-size:27px}body{background:#f3f8f4}#nav{position:sticky;bottom:0;top:auto;z-index:8;background:white;box-shadow:0 -4px 22px #16452a18;display:flex;overflow-x:auto;gap:2px;padding:7px 5px;order:2}#app{min-height:100dvh;flex-direction:column}#app[style*="block"]{display:flex!important}#nav button{flex:1;min-width:80px;border:0;background:white;padding:10px 4px;font-size:12px;color:#61746a}#nav button.active{color:#07823b;background:#e8f8ed;border-radius:14px;font-weight:800}#content{flex:1;padding-bottom:115px}.sgstats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.sgstat{background:white;padding:19px 7px;border-radius:23px;text-align:center;box-shadow:0 3px 14px #174d2910}.sgstat b{font-size:29px;color:#087a38;display:block}.sgstat span{font-size:12px;color:#6d8175}.sgtiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.sgtile{border:1px solid #e3ece5;background:#fff;border-radius:25px;padding:22px 17px;min-height:151px;text-align:left;box-shadow:0 4px 15px #163b2810}.sgtile i{font-style:normal;font-size:32px;display:block;margin-bottom:13px}.sgtile b{display:block;font-size:19px;color:#182c20}.sgtile small{display:block;color:#738278;margin-top:6px}#avo{overflow:hidden;padding:0;border:4px solid white;box-shadow:0 4px 25px #142e2e44;background:#bceaa7}#avo img{width:100%;height:100%;object-fit:cover;object-position:50% 22%}#aguModal{position:fixed;inset:0;background:#102c1fcf;z-index:50;display:none;align-items:center;justify-content:center;padding:15px}#aguPanel{background:white;border-radius:25px;max-width:480px;width:100%;max-height:94dvh;overflow:auto;padding:15px;text-align:center}#aguPhoto{width:min(65vw,250px);height:280px;object-fit:cover;object-position:50% 25%;border-radius:18px;animation:sgDance 1.2s ease-in-out infinite alternate}@keyframes sgDance{from{transform:rotate(-7deg) translateY(3px)}to{transform:rotate(7deg) translateY(-8px)}}.sgrow{display:flex;gap:8px;align-items:center}.sgrow input{flex:1;min-width:0}.sgnotice{padding:12px;border-radius:12px;background:#eff9f0;color:#386346;font-size:13px}
@@ -23,6 +23,15 @@ header #status{margin-left:80px;font-size:11px}
 @media(max-width:380px){.sg-brand-logo{height:57px;width:57px}.sg-brand{gap:8px}header>small,header #status{margin-left:65px}}
 </style><link rel="manifest" href="manifest.webmanifest"></head><body>
 <section id="login"><div class="card"><h1>🥑 SG Corredores</h1><p>30 años a su servicio · Máxima frescura y calidad</p><h2>Iniciar sesión</h2><a href="./portal.html">Zona Clientes</a><label>PIN de empleado</label><input id="sgEmployeePin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 cifras"><div class="actions"><button class="primary" type="button" onclick="sgPinLogin(this)">Entrar sin correo</button></div><p class="muted">Acceso de empleados autorizados. Solo necesitas el PIN la primera vez en este dispositivo.</p><hr><p>Acceso mediante correo</p><label>Correo</label><input id="email" type="email" autocomplete="username"><div class="actions"><button class="primary" onclick="sgMagicLink(this)">Enviar enlace de acceso</button><button class="secondary" type="button" onclick="sgRequestPasswordReset(this)">¿Olvidaste tu contraseña?</button></div><p id="loginError" role="status" aria-live="polite" style="color:#174c32;white-space:pre-wrap"></p><p class="muted">Solo empleados autorizados. Abre el enlace recibido en este mismo navegador.</p><details><summary>Acceso anterior con contraseña</summary><label>Contraseña</label><input id="password" type="password" autocomplete="current-password"><div class="actions"><button class="secondary" onclick="signIn()">Entrar</button></div></details><details><summary>Configuración de Supabase</summary><label>URL del proyecto</label><input id="projectUrl" value="https://zyzcnosaavvcijsmcowq.supabase.co"><label>Clave pública Publishable</label><input id="publicKey" placeholder="sb_publishable_..."><div class="actions"><button class="secondary" onclick="saveConfig()">Guardar conexión</button></div><p class="muted">No introduzcas claves secret ni service_role.</p></details></div></section>
+<section id="sgStaffActivation" hidden>
+  <div class="card">
+    <h1>Invitación de empleado</h1>
+    <p>Activa el acceso en el navegador que vas a usar para trabajar con SG Corredores.</p>
+    <div class="actions"><button type="button" class="primary" onclick="sgActivateStaff(this)">Activar acceso</button></div>
+    <p id="sgStaffActivationStatus" role="status" aria-live="polite"></p>
+    <a href="./">Volver al inicio de sesión</a>
+  </div>
+</section>
 <section id="sgPasswordRecovery" hidden>
   <div class="card">
     <h1>Recuperar contraseña</h1>
@@ -283,9 +292,37 @@ function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> 
 function exportData(){let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),workspace,records},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Corredores_'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguacatín al habla! ¡Hoy repartimos frescura!','¡Vamos, equipo! ¡Las sandías no se venden solas!','¡Buenos días! ¡A por una jornada de fruta y verdura!','¡Que hoy salgan las cajas como churros!'];
 function dance(){let a=$('avo');if(!a)return;a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
+let sgStaffDirectToken;
+async function sgActivateStaff(button){
+  if(!sgStaffDirectToken||button.disabled)return;
+  const status=$('sgStaffActivationStatus');
+  button.disabled=true;
+  status.textContent='Activando acceso…';
+  try{
+    if(!api)connect();
+    const {redeemDirectInvite}=await import('./sg10/common.js?v=whatsapp-directo');
+    user=await redeemDirectInvite(api,sgStaffDirectToken,false);
+    localStorage.removeItem(sgStaffInviteKey);
+    await enter();
+    sgStaffDirectToken=null;
+    history.replaceState(null,'',location.pathname+location.search);
+    $('sgStaffActivation').hidden=true;
+  }catch(error){
+    status.textContent=err(error);
+  }finally{
+    button.disabled=false;
+  }
+}
 async function init(){
  const callback=new URL(location.href);
  const fragment=new URLSearchParams(callback.hash.slice(1));
+ const directToken=fragment.get('sg-acceso');
+ if(/^[a-f0-9]{64}$/.test(directToken||'')){
+   sgStaffDirectToken=directToken;
+   $('login').style.display='none';
+   $('sgStaffActivation').hidden=false;
+   return;
+ }
  if(fragment.get('type')==='recovery'){
    await sgOpenPasswordRecovery(callback,fragment);
    return;
@@ -1085,8 +1122,8 @@ html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-widt
 </script><script>
 (()=>{
 const old=settings;
-settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<div class="card"><h2>Gestión de empleados</h2><p>Invita a un empleado por correo o WhatsApp.</p><form onsubmit="sgInviteEmployee(event)"><label>Correo electrónico<input id="sgInviteEmail" type="email" required autocomplete="off" maxlength="254" placeholder="empleado@correo.com"></label><button type="submit" class="primary">Invitar por correo</button> <button type="button" class="secondary" onclick="sg10InviteStaffWhatsApp(this)">Invitar por WhatsApp</button></form><p id="sgInviteStatus" role="status" aria-live="polite"></p></div>`:'')};
+settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<div class="card"><h2>Gestión de empleados</h2><button type="button" class="primary" onclick="sg10InviteStaffWhatsApp(this)">Invitar por WhatsApp</button><p id="sgWhatsAppInviteStatus" role="status" aria-live="polite"></p><form onsubmit="sgInviteEmployee(event)"><label>Correo electrónico<input id="sgInviteEmail" type="email" required autocomplete="off" maxlength="254" placeholder="empleado@correo.com"></label><button type="submit" class="secondary">Invitar por correo</button></form><p id="sgInviteStatus" role="status" aria-live="polite"></p></div>`:'')};
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
-</script><script type="module" src="./sg10/staff.js"></script></body></html>
+</script><script type="module" src="./sg10/staff.js?v=whatsapp-directo"></script></body></html>
