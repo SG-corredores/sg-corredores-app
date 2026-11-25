@@ -16,6 +16,7 @@ export function bindAvatarGesture(avatar, { expanded, tap, hold, drag, save }) {
 
   function begin(id, x, y, touch) {
     if (press) return;
+    if (document.activeElement === avatar) avatar.blur();
     const {left,top} = avatar.getBoundingClientRect();
     const open = expanded();
     const current = {id,x,y,left,top,touch,open,started:performance.now()};
@@ -47,7 +48,7 @@ export function bindAvatarGesture(avatar, { expanded, tap, hold, drag, save }) {
     press = null;
     avatar.classList.remove("is-held");
     if (current.dragging) save();
-    if (released && current.touch && !suppressClick && !current.handled) tap();
+    if (released && current.touch && !suppressClick && !current.handled) tap(false);
   }
 
   const activeTouch = event => press?.touch && [...event.changedTouches].find(touch => touch.identifier === press.id);
@@ -95,7 +96,7 @@ export function bindAvatarGesture(avatar, { expanded, tap, hold, drag, save }) {
       event.preventDefault();
       return;
     }
-    tap();
+    tap(event.detail === 0);
   });
   window.addEventListener("blur",() => end(false));
 }

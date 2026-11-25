@@ -458,7 +458,7 @@ window.aguSend=async function(){
 #aguAvatar.is-held{animation-play-state:paused!important}
 </style>
 <script type="module">
-import { bindAvatarGesture, bindAvatarIdle } from "./sg10/aguacatin-controls.js";
+import { bindAvatarGesture, bindAvatarIdle } from "./sg10/aguacatin-controls.js?v=foco";
 const floating = document.getElementById("aguFloat");
 const avatar = document.getElementById("aguAvatar");
 const controls = document.getElementById("aguControls");
@@ -481,7 +481,7 @@ function close(restoreFocus = false) {
 bindAvatarGesture(avatar,{
   expanded,
   tap:() => window.openAgu(),
-  hold:() => close(true),
+  hold:close,
   drag:locate,
   save:() => {
     const {left:x,top:y} = floating.getBoundingClientRect();

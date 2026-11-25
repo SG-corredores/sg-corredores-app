@@ -1,4 +1,4 @@
-import { bindAvatarGesture, bindAvatarIdle } from "./aguacatin-controls.js";
+import { bindAvatarGesture, bindAvatarIdle } from "./aguacatin-controls.js?v=foco";
 
 const greetings = [
   "¡Hola! Soy Aguacatín. Pregúntame por los pedidos y compras de tu empresa.",
@@ -168,8 +168,8 @@ export function installAguacatin(preview, ask) {
 
   bindAvatarGesture(avatar,{
     expanded:isOpen,
-    tap:() => { if (isOpen()) close(true); else open(); },
-    hold:() => close(true),
+    tap:keyboard => { if (isOpen()) close(keyboard); else open(); },
+    hold:close,
     drag:(x,y) => { position = {x,y}; place(); },
     save:() => { if (position) try { localStorage.setItem(positionKey,JSON.stringify(position)); } catch {} },
   });

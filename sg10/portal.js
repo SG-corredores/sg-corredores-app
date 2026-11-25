@@ -1,4 +1,4 @@
-import { installAguacatin } from "./portal-aguacatin.js?v=cierre";
+import { installAguacatin } from "./portal-aguacatin.js?v=foco";
 import { installCarousel } from "./portal-carousel.js";
 import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=sacos";
 
