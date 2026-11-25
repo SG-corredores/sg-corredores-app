@@ -572,7 +572,7 @@ window.aguSend = async function () {
     const result = await invoke(api,"sg10-aguacatin",{
       workspace,mode,text,date,history,deep:/\b(analiza|compara|incoherencia|discrepancia|explica|a fondo|detallado|resumen complejo)\b/.test(query),
     });
-    if (account !== currentScope()) return;
+    if (account !== currentScope() || $("aguControls").hidden) return;
     if (mode === "pedido" && Array.isArray(result.articulos) && result.articulos.length) {
       const company = matchCompany(text,records.clients.map(row => ({id:row.id,name:d(row).name})));
       assistantDraft(result.articulos.slice(0,30),company);
