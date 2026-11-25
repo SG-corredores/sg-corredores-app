@@ -254,12 +254,12 @@ function locate(x,y){const r=flo.getBoundingClientRect();const w=r.width||75,h=r
 function save(){const r=flo.getBoundingClientRect();try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(e){}}
 function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging')}
 try{const v=JSON.parse(localStorage.getItem(key));if(v&&Number.isFinite(v.x)&&Number.isFinite(v.y))requestAnimationFrame(()=>locate(v.x,v.y))}catch(e){}
-av.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;
+av.addEventListener('pointerdown',e=>{if(flo.classList.contains('aguExpanded')||(e.pointerType==='mouse'&&e.button!==0))return;
  const r=flo.getBoundingClientRect();down={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top};holding=false;moved=false;
  try{av.setPointerCapture(e.pointerId)}catch(err){}
  clearTimeout(timer);timer=setTimeout(()=>{if(down){holding=true;blockClick=true;flo.classList.add('aguDragging');if(navigator.vibrate)navigator.vibrate(25)}},300);
 },{capture:true});
-av.addEventListener('pointermove',e=>{if(!down||e.pointerId!==down.id)return;
+av.addEventListener('pointermove',e=>{if(flo.classList.contains('aguExpanded')||!down||e.pointerId!==down.id)return;
  const dx=e.clientX-down.x,dy=e.clientY-down.y;
  if(!holding){if(Math.hypot(dx,dy)>14){clearTimeout(timer);timer=null}return}
  e.preventDefault();moved=true;locate(down.left+dx,down.top+dy);
@@ -269,7 +269,7 @@ function end(e){if(!down||e.pointerId!==down.id)return;const wasHold=holding;
  release();}
 av.addEventListener('pointerup',end,{capture:true});av.addEventListener('pointercancel',end,{capture:true});
 av.addEventListener('click',e=>{if(blockClick){e.preventDefault();e.stopImmediatePropagation();blockClick=false}},{capture:true});
-window.addEventListener('resize',()=>{if(flo.style.left){const r=flo.getBoundingClientRect();locate(r.left,r.top)}});
+window.addEventListener('resize',()=>{if(flo.style.left&&!flo.classList.contains('aguExpanded')){const r=flo.getBoundingClientRect();locate(r.left,r.top)}});
 })();
 </script>
 <script>
@@ -833,4 +833,12 @@ function decorate(){if(scope!==key())return;for(const b of document.querySelecto
 function draw(){if(scope!==key())return;const rows=records.orders.filter(r=>valid(r)&&d(r).date===(day||today()));const groups=new Map();for(const r of rows.filter(r=>picks.has(r.id)&&remaining(r)!==0)){const x=d(r),k=JSON.stringify([String(x.product).trim().toLowerCase(),String(x.variety||'').trim().toLowerCase(),x.quantityUnit]);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)}$('content').innerHTML=`<div class="card"><h2>Mi lista de compra</h2><input id="sgMineDate" type="date" value="${esc(day||today())}"><p>Selecciona pedidos y registra las cantidades compradas. Las líneas completas desaparecen de esta lista.</p>${[...groups.values()].map(rs=>{const x=d(rs[0]),ns=rs.map(remaining);return `<div class="sgMineLine sgMineSelected"><b>${esc(x.product)} ${esc(x.variety||'')}</b><h3>${ns.some(n=>n===null)?'Cantidad por revisar':qty(ns.reduce((a,b)=>a+b,0))+' '+sgUnitLabel(x)}</h3>${rs.map(r=>`<div>${esc(name(d(r).clientId))} · ${remaining(r)===null?'Revisar':qty(remaining(r))} <button data-buy="${esc(r.id)}" ${remaining(r)===null?'disabled':''}>Comprar</button><button data-pick="${esc(r.id)}">Quitar</button></div>`).join('')}</div>`}).join('')||'<p>No tienes productos pendientes seleccionados.</p>'}</div><div class="card"><h2>Seleccionar de pedidos generales</h2>${rows.filter(r=>remaining(r)!==0).map(r=>`<div class="sgMineLine ${picks.has(r.id)?'sgMineSelected':''}">${esc(name(d(r).clientId))} · ${esc(d(r).product)} ${esc(d(r).variety||'')} · ${remaining(r)===null?'Revisar':qty(remaining(r))+' '+sgUnitLabel(d(r))}<button data-pick="${esc(r.id)}">${picks.has(r.id)?'Quitar':'Seleccionar'}</button></div>`).join('')}</div>`;const printBtn=document.createElement('button');printBtn.textContent='Imprimir mi compra / PDF';printBtn.onclick=()=>{const items=[...groups.values()].map(rs=>{const x=d(rs[0]),ns=rs.map(remaining);return {product:[x.product,x.variety].filter(Boolean).join(' · '),quantity:ns.some(n=>n===null)?'Revisar':qty(ns.reduce((a,b)=>a+b,0))+' '+(x.quantityUnit==='pales'?'P':'C')}});if(!items.length)return toast('No hay productos pendientes seleccionados');window.sgPrintPanels([{title:'Mi lista de compra',items}],day||today())};$('sgMineDate').after(printBtn);$('sgMineDate').onchange=e=>{day=e.target.value;draw()};$('content').querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>toggle(b.dataset.pick));$('content').querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(b.dataset.buy))}
 async function buy(id){if(busy)return;const r=get('orders',id),x=d(r),left=remaining(r);if(!left)return;const raw=prompt('Cantidad comprada en '+sgUnitLabel(x),String(left));if(raw===null)return;const n=parseNum(raw);if(!Number.isFinite(n)||n<=0||n>left)return toast('Cantidad no válida');const supplier=prompt('Puesto (opcional)','');if(supplier===null)return;const pr=prompt('Precio €/kg (opcional)','');if(pr===null)return;const price=pr.trim()?parseNum(pr):null;if(price!==null&&(!Number.isFinite(price)||price<0||Math.abs(price*100-Math.round(price*100))>1e-7))return toast('Precio no válido');busy=true;try{await save('purchases',{date:x.date,clientId:x.clientId,product:x.product,variety:x.variety||'',orderId:id,quantityUnit:x.quantityUnit,requestedQuantity:x.boxes,boxes:x.quantityUnit==='cajas'?n:0,sgBoughtPallets:x.quantityUnit==='pales'?n:0,supplier,priceCents:price===null?null:Math.round(price*100),price:null,priceUnit:'kg',weightMode:'real',kg:0,kgPerBox:0,status:'Pendiente',notes:'Compra desde lista personal'});draw();toast('Compra registrada')}catch(e){toast(err(e))}finally{busy=false}}
 const nav=$('nav'),b=document.createElement('button');b.textContent='Mi compra';b.onclick=()=>go('micompra');nav.append(b);render=function(){if(page==='micompra'){if(scope===key())draw();else $('content').innerHTML='<div class="card">Cargando mi lista…</div>';load();return}old();if(page==='pedidos'||page==='hoja'){decorate();load()}};
-})();</script></body></html>
+})();</script><style id="sg-center-expanded">
+#aguFloat.aguExpanded{left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(350px,calc(100vw - 32px))!important;max-width:calc(100vw - 32px)!important;max-height:calc(100dvh - 32px)!important;align-items:center!important;overflow-y:auto;overflow-x:hidden;z-index:1000;box-sizing:border-box;padding:8px;pointer-events:auto}
+#aguFloat.aguExpanded #aguControls{width:100%;align-items:center;box-sizing:border-box;flex-shrink:0}
+#aguFloat.aguExpanded #aguEntry{box-sizing:border-box}
+#aguFloat.aguExpanded #aguAvatar{flex-shrink:0;max-height:32dvh}
+#aguFloat.aguExpanded #aguWave{margin-right:0}
+#aguFloat.aguExpanded #aguControls .aguClose{align-self:flex-end}
+</style>
+</body></html>
