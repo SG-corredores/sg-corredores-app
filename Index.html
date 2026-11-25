@@ -111,7 +111,7 @@ function settings(){return `<div class="card"><h2>Ajustes</h2><p><b>Cuenta:</b> 
 function exportData(){let blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),workspace,records},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SG_Corredores_'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const greetings=['¡Hola, equipo! ¡Que no se nos escape ni un tomate!','¡Aguacatín al habla! ¡Hoy repartimos frescura!','¡Vamos, equipo! ¡Las sandías no se venden solas!','¡Buenos días! ¡A por una jornada de fruta y verdura!','¡Que hoy salgan las cajas como churros!'];
 function dance(){let a=$('avo');a.classList.remove('dance');void a.offsetWidth;a.classList.add('dance')}
-function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.65;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
+function aguacatin(silent=false){let phrase=greetings[Math.floor(Math.random()*greetings.length)];dance();if(!silent)toast(phrase);if('speechSynthesis' in window){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(phrase);u.lang='es-ES';u.pitch=1.0;u.rate=1.12;speechSynthesis.speak(u)}catch{}}}
 async function init(){ $('projectUrl').value=config.url;$('publicKey').value=config.key;try{connect();const {data,error}=await api.auth.getSession();if(error)throw error;if(data?.session?.user){user=data.session.user;try{await enter();}catch(e){if(!user.is_anonymous)throw e;user=null;workspace=null;$('loginError').textContent='Introduce el PIN de empleado para completar el acceso.';}return}const h=new URLSearchParams(location.hash.slice(1));const q=new URLSearchParams(location.search);if(h.get('error_description')||q.get('error_description'))$('loginError').textContent=h.get('error_description')||q.get('error_description');}catch(e){$('loginError').textContent=err(e)}}init();
 </script>
 <div id="aguModal" role="dialog" aria-modal="true"><div id="aguPanel">
@@ -125,7 +125,7 @@ async function init(){ $('projectUrl').value=config.url;$('publicKey').value=con
 <script>
 const aguPhrases=['¡Aquí estoy, más fresco que una lechuga con aire acondicionado!','¡Hoy vendemos hasta las pepitas de la sandía!','¡Los tomates están rojos de ver cuánto trabajamos!','¡Que no se nos duerma ni una alcachofa!','¡A vender, que las cajas no se mueven solas!','¡Estoy tan en forma que hasta los pepinos me tienen envidia!','¡Cuidado con las cebollas, que hoy no estamos para llorar!','¡Vamos al lío, que los melones no se colocan solos!'];
 let aguLast=-1;
-function aguSay(s){let i;if(s){$('aguLine').textContent=s}else{do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);aguLast=i;$('aguLine').textContent=aguPhrases[i]}if('speechSynthesis'in window){speechSynthesis.cancel();let vozTexto=$('aguLine').textContent.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/\s+/g,' ').trim();if(vozTexto){let u=new SpeechSynthesisUtterance(vozTexto);u.lang='es-ES';u.pitch=1.8;u.rate=1.12;speechSynthesis.speak(u)}}}
+function aguSay(s){let i;if(s){$('aguLine').textContent=s}else{do{i=Math.floor(Math.random()*aguPhrases.length)}while(i===aguLast&&aguPhrases.length>1);aguLast=i;$('aguLine').textContent=aguPhrases[i]}if('speechSynthesis'in window){speechSynthesis.cancel();let vozTexto=$('aguLine').textContent.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/\s+/g,' ').trim();if(vozTexto){let u=new SpeechSynthesisUtterance(vozTexto);u.lang='es-ES';u.pitch=1.0;u.rate=1.12;if(!window.sgVoiceInterrupt) speechSynthesis.speak(u)}}}
 function openAgu(){$('aguModal').style.display='flex';aguSay()}
 function closeAgu(){$('aguModal').style.display='none';if('speechSynthesis'in window)speechSynthesis.cancel()}
 function sgArticleAnswer(raw){
@@ -445,8 +445,8 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
     if(speak&&message&&'speechSynthesis' in window){
       speechSynthesis.cancel();
       const utterance=new SpeechSynthesisUtterance(speechText(message));
-      utterance.lang='es-ES';utterance.pitch=1.65;utterance.rate=1.06;
-      speechSynthesis.speak(utterance);
+      utterance.lang='es-ES';utterance.pitch=1.0;utterance.rate=1.06;
+      if(!window.sgVoiceInterrupt) speechSynthesis.speak(utterance);
     }
   }
   function isOrderCommand(t){
@@ -675,13 +675,12 @@ const bubble=document.getElementById('aguBubble'),controls=document.getElementBy
 if(!bubble||!controls)return;
 document.getElementById('sgVoicePanel')?.remove();
 const panel=document.createElement('div');panel.id='sgVoicePanel';
-panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="fast">🥑 Aguacatín rápido</option><option value="cheerful">Alegre (nube)</option><option value="natural">Natural</option></select>';
+panel.innerHTML='<button type="button" id="sgVoiceToggle">🔊 Voz natural activada</button><button type="button" id="sgVoiceStop">⏹ Parar</button><label for="sgVoiceRate">Velocidad</label><select id="sgVoiceRate"><option value="0.9">Tranquila</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select><label for="sgVoiceVoice">Estilo</label><select id="sgVoiceVoice"><option value="cheerful">🥑 Aguacatín alegre</option><option value="natural">Natural</option></select>';
 controls.appendChild(panel);
 const toggle=panel.querySelector('#sgVoiceToggle'),stop=panel.querySelector('#sgVoiceStop'),rate=panel.querySelector('#sgVoiceRate'),style=panel.querySelector('#sgVoiceVoice');
-let utterance=null, controller=null;
 let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',last='',serial=0,audio=null,objectUrl=null;
-function refresh(){toggle.textContent=enabled?'🔊 Voz activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
-function halt(){serial++;controller?.abort();controller=null;utterance=null;try{audio?.pause();if(audio)audio.src='';}catch{}audio=null;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;try{speechSynthesis.cancel()}catch{}}
+function refresh(){toggle.textContent=enabled?'🔊 Voz natural activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
+function halt(){serial++;try{audio?.pause();if(audio)audio.src='';}catch{}audio=null;if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;try{speechSynthesis.cancel()}catch{}}
 window.sgVoiceInterrupt=halt;
 function clean(s){return String(s||'').replace(/https?:\/\/\S+/g,'enlace').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim().slice(0,1800)}
 async function say(raw){
@@ -689,28 +688,18 @@ async function say(raw){
  if(!enabled||!text||/^(He oído:|Consultando|Te escucho|🎙|¡Aquí estoy!)/i.test(text)){window.sgConversationResume?.();return;}
  last=text;halt();window.sgConversationPause?.();const request=serial;const watchdog=setTimeout(()=>{if(request===serial&&!audio){halt();window.sgConversationResume?.();}},12000);
  try{
-  if(style.value==='fast' && 'speechSynthesis' in window){
-   clearTimeout(watchdog);
-   const u=new SpeechSynthesisUtterance(text);utterance=u;u.lang='es-ES';u.pitch=1.95;u.rate=1.16*(Number(rate.value)||1);
-   const voices=speechSynthesis.getVoices();const v=voices.find(v=>v.lang==='es-ES'&&v.localService)||voices.find(v=>v.lang==='es-ES');if(v)u.voice=v;
-   let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);if(request===serial){utterance=null;window.sgConversationResume?.();}};
-   const timer=setTimeout(()=>{if(request===serial)speechSynthesis.cancel();finish()},Math.max(12000,text.length*130));
-   u.onend=finish;u.onerror=()=>{if(request===serial)toggle.textContent='⚠️ Voz local no disponible';finish()};speechSynthesis.speak(u);return;
-  }
-  controller=new AbortController();
   const base=(typeof config!=='undefined'&&config.url)||'';
   const key=(typeof config!=='undefined'&&config.key)||'';
   if(!base||!key||typeof api==='undefined'||!api)throw Error('Sin conexión');
   const {data:{session}}=await api.auth.getSession();
   if(!session?.access_token)throw Error('Inicia sesión');
-  if(request!==serial)return;
   const response=await fetch(base.replace(/\/$/,'')+'/functions/v1/sg-aguacatin-voz',{
-   method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+session.access_token},
+   method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+session.access_token},
    body:JSON.stringify({text,style:style.value})
   });
   if(!response.ok)throw Error('Voz no disponible ('+response.status+')');
   const blob=await response.blob();clearTimeout(watchdog);if(request!==serial)return;
-  objectUrl=URL.createObjectURL(blob);audio=new Audio(objectUrl);audio.playbackRate=Number(rate.value)||1;
+  objectUrl=URL.createObjectURL(blob);audio=new Audio(objectUrl);audio.playbackRate=Number(rate.value)||1;audio.preservesPitch=true;toggle.textContent='🔊 Voz Supabase activa';
   audio.onended=()=>{if(request===serial){URL.revokeObjectURL(objectUrl);objectUrl=null;audio=null;window.sgConversationResume?.();}};audio.onerror=()=>{if(request===serial)window.sgConversationResume?.();};
   await audio.play();
  }catch(e){
@@ -720,12 +709,11 @@ async function say(raw){
   toggle.textContent='⚠️ Voz natural no disponible';window.sgConversationResume?.();
  }
 }
-if(!window.speechSynthesis)style.value="cheerful";
 refresh();
 toggle.addEventListener('click',()=>{enabled=!enabled;localStorage.setItem('sg_agu_voice_enabled',String(enabled));halt();last='';refresh();if(!enabled)window.sgConversationResume?.()});
 stop.addEventListener('click',()=>{window.sgConversationStop?.();halt();last=''});
 let debounce;
-new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>{const t=bubble.textContent.trim();if(t)say(t)},25)}).observe(bubble,{childList:true,characterData:true,subtree:true});
+new MutationObserver(()=>{clearTimeout(debounce);debounce=setTimeout(()=>{const t=bubble.textContent.trim();if(t)say(t)},80)}).observe(bubble,{childList:true,characterData:true,subtree:true});
 const oldListen=window.aguListen;
 if(typeof oldListen==='function')window.aguListen=function(){halt();last='';return oldListen.apply(this,arguments)};
 })();
@@ -800,7 +788,7 @@ function pause(){clearTimeout(timer);clearTimeout(idleTimer);idleTimer=null;if(r
 function stop(){active=false;pause();button.hidden=true;window.sgCancelPendingOrder?.();}
 function resume(){clearTimeout(timer);if(active&&!rec&&!document.hidden)timer=setTimeout(()=>{if(busy)resume();else listen();},220);}
 function listen(){if(!active||busy||rec||document.hidden)return;if(idleTimer===null)idleTimer=setTimeout(stop,10000);if(!SR){stop();bubble.textContent='Micrófono no compatible con este navegador.';return;}const r=new SR();rec=r;r.lang='es-ES';r.continuous=false;r.interimResults=false;
-r.onspeechstart=()=>{if(rec===r){clearTimeout(idleTimer);idleTimer=null;}};r.onspeechend=()=>{if(rec===r&&active&&idleTimer===null)idleTimer=setTimeout(stop,10000);};r.onresult=async e=>{if(rec!==r||!active)return;const text=e.results[0][0].transcript.trim();failures=0;busy=true;pause();if(/^(adios|hasta luego|deten la conversacion|deja de escuchar)[.! ]*$/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g,''))){busy=false;stop();return;}document.getElementById('aguFloatInput').value=text;try{await window.aguSend()}finally{busy=false;const muted=localStorage.getItem('sg_agu_voice_enabled')==='false';if(muted)resume();else if(active&&!rec){clearTimeout(timer);timer=setTimeout(()=>{if(active&&!rec&&!speechSynthesis.speaking)resume();},1500);} }};
+r.onspeechstart=()=>{if(rec===r){clearTimeout(idleTimer);idleTimer=null;}};r.onspeechend=()=>{if(rec===r&&active&&idleTimer===null)idleTimer=setTimeout(stop,10000);};r.onresult=async e=>{if(rec!==r||!active)return;const text=e.results[0][0].transcript.trim();failures=0;busy=true;pause();if(/^(adios|hasta luego|deten la conversacion|deja de escuchar)[.! ]*$/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g,''))){busy=false;stop();return;}document.getElementById('aguFloatInput').value=text;try{await window.aguSend()}finally{busy=false;const muted=localStorage.getItem('sg_agu_voice_enabled')==='false';if(muted)resume(); }};
 r.onerror=e=>{if(rec!==r)return;if(['not-allowed','service-not-allowed','audio-capture'].includes(e.error)||(++failures>4&&e.error!=='no-speech')){stop();bubble.textContent='No se puede mantener el micrófono activo. Pulsa el micrófono para reintentar.';}};
 r.onend=()=>{if(rec!==r)return;rec=null;floating.classList.remove('aguListening');resume();};try{r.start();floating.classList.add('aguListening')}catch{rec=null;stop();}};
 window.sgConversationPause=pause;window.sgConversationResume=resume;window.sgConversationStop=stop;
@@ -828,14 +816,6 @@ function validate(a){
  x.price=x.price??null;x.priceUnit=x.priceUnit||'kg';if(!['kg','caja'].includes(x.priceUnit)|| (x.price!==null&&(!Number.isFinite(x.price)||x.price<0||Math.abs(x.price*100-Math.round(x.price*100))>1e-8)))throw Error('Precio inválido');x.priceCents=x.price===null?null:Math.round(x.price*100);
  return {type,id:r?.id,data:x,original:r?JSON.stringify(d(r)):null};
 }
-function localOrder(msg){
- const q=norm(msg).replace(/[.!?¿¡]+$/g,'');
- const m=q.match(/^(?:oye aguacatin[, ]+)?(?:apunta(?:me)?|anota(?:me)?|pon(?:me|le)?|pide|registra)\s+(un|una|uno|dos|tres|cuatro|cinco|\d+)\s+(cajas?|pales?|palets?|pallets?)\s+(?:de\s+)?([a-zñ ]+?)\s+para\s+([a-zñ ]+)$/);
- if(!m||!records.clients.length||/\b(y|tambien|manana|ayer|precio|puesto|otro|mismo)\b/.test(q))return null;
- const name=m[4].trim(), product=m[3].trim();if(!name||!product)return null;
- const exact=records.clients.filter(r=>norm(d(r).name)===name);const matches=exact.length?exact:records.clients.filter(r=>name.length>=3&&(' '+norm(d(r).name)+' ').includes(' '+name+' '));if(matches.length!==1)return null;
- const nums={un:1,una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5};return {tipo:'crear',clientId:matches[0].id,product,boxes:nums[m[1]]??Number(m[1]),quantityUnit:m[2].startsWith('caja')?'cajas':'pales',date:today()};
-}
 async function run(msg){if(busy)return;busy=true;try{
  if(!user||role!=='owner'||user.is_anonymous)throw Error('Necesitas acceso de administrador');
  if(pending&&(pending.uid!==user.id||pending.workspace!==workspace||Date.now()>pending.expires))pending=null;
@@ -843,20 +823,19 @@ async function run(msg){if(busy)return;busy=true;try{
  if(pending&&/^(no|cancela|cancelar|no lo guardes)$/.test(q)){pending=null;say('De acuerdo, no guardo nada.');return;}
  if(pending&&/^(si|si guardalo|guarda|guardalo|confirmo|confirmar|adelante|vale|correcto)$/.test(q)){
  const batch=pending;pending=null;let done=0;try{for(const a of batch.ops){if(a.id){const {data,error}=await api.from(TABLES.orders).select('data').eq('workspace_id',workspace).eq('id',a.id).single();if(error||JSON.stringify(data.data)!==a.original)throw Error('El pedido ha cambiado; vuelve a solicitarlo');}await save('orders',a.data,a.id);done++;}render();say(`Guardadas ${done} operaciones correctamente.`);}catch(e){say(`Guardadas ${done} de ${batch.ops.length} operaciones. ${e.message}. Revisa los pedidos antes de repetir.`);}return;}
- const local=localOrder(msg);if(local){const ops=[validate(local)];pending={uid:user.id,workspace,expires:Date.now()+120000,ops,raw:[local]};const a=ops[0].data;const text=`${a.boxes} ${a.quantityUnit==='pales'?'palés':'cajas'} de ${a.product} para ${d(records.clients.find(r=>r.id===a.clientId)).name}. ¿Confirmas?`;window.sgAguHistory?.add(msg,text);say(text);return;}
  const article=sgArticleAnswer(msg);if(article!==null){window.sgAguHistory?.add(msg,article);say(article);return;}
  const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión');
  const response=await api.functions.invoke('Sg-aguacatin-voz',{body:{mensaje:msg+'\n[Contexto de fecha: hoy es '+today()+' en Europe/Madrid. Consulta exclusivamente hoy salvo fecha explícita del usuario; no leas fechas innecesariamente ni uses pedidos de otros días. Interpreta abreviaturas y errores, relaciona referencias con historial y borrador, distingue cajas y palés, no inventes datos ni confirmes cambios sin guardado. Responde breve y natural; pregunta solo si hay ambigüedad relevante. Para varias operaciones devuelve acciones separadas y usa identificadores reales.]',fechaHoy:today(),zonaHoraria:'Europe/Madrid',agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
  if(response.error){let detail=null;try{detail=await response.error.context?.json()}catch(_){}throw Error(detail?.error||response.error.message||'Error de conexión con Aguacatín');}if(!response.data?.ok)throw Error(response.data?.error||'Respuesta inválida de Aguacatín');
- const result=response.data;let text=typeof result.respuesta==='string'&&result.respuesta.trim()?result.respuesta:'No he recibido una respuesta válida. Repite la consulta.';
+ const result=response.data;let text=result.respuesta;
  if(Array.isArray(result.acciones)&&result.acciones.length){if(result.acciones.length>20)throw Error('Máximo 20 operaciones por lote');const ops=result.acciones.map(validate);pending={uid:user.id,workspace,expires:Date.now()+120000,ops,raw:result.acciones};text=ops.map(a=>`${a.type}: ${a.data.boxes} ${a.data.quantityUnit==='pales'?'palés':'cajas'} de ${a.data.product} para ${d(records.clients.find(r=>r.id===a.data.clientId)).name}, fecha ${a.data.date}${a.data.price===null?'':', precio '+a.data.price+' euros por '+a.data.priceUnit}`).join('. ')+'. ¿Confirmas?';}else{pending=null;}
  window.sgAguHistory?.add(msg,text);say(text);
  }catch(e){pending=null;say(e.message||'No he podido completar la operación');}finally{busy=false;}}
 window.aguSend=async()=>{const el=$('aguFloatInput'),msg=el.value.trim();if(!msg||busy)return;el.value='';await run(msg);};window.askAgu=async()=>{const msg=$('aguQuestion')?.value.trim();if(msg)await run(msg);};
 })();
 </script><script id="sg-print-82">(()=>{
-function printOrders(client,date){const list=records.orders.filter(r=>d(r).date===date&&(!client||d(r).clientId===client)&&!['Cancelado','Anulado'].includes(d(r).status));if(!list.length)return toast('No hay pedidos para esa selección');const groups=new Map();for(const r of list){const x=d(r);if(!groups.has(x.clientId))groups.set(x.clientId,[]);const ps=records.purchases.filter(p=>d(p).orderId===r.id&&!['Anulado','Cancelado'].includes(d(p).status)).map(d);const money=y=>y.priceCents==null&&(y.price==null||y.price==='')?'':Number(price(y)).toFixed(2).replace('.',',')+' €/'+(y.priceUnit==='caja'?'caja':'kg');groups.get(x.clientId).push({quantity:String(x.boxes??'')+' '+(x.quantityUnit==='pales'?'P':x.quantityUnit==='cajas'?'C':''),product:[x.product,x.variety,x.notes].filter(Boolean).join(' · '),prices:ps.length?ps.map(money):[money(x)],suppliers:ps.length?ps.map(y=>y.supplier??''):[x.supplier??'']})}window.sgPrintPanels([...groups].map(([id,items])=>({title:d(records.clients.find(r=>r.id===id)).name||'Cliente',items})),date)}
-window.sgPrintPanels=function(groups,date){const w=window.open('','_blank');if(!w)return toast('Permite ventanas emergentes para imprimir');const panels=[];for(const g of groups){let chunk=[],weight=0;for(const item of g.items){const cost=Math.max(1,Math.ceil(String(item.product).length/23));if(chunk.length&&weight+cost>17){panels.push({title:g.title+(panels.some(p=>p.base===g.title)?' (cont.)':''),base:g.title,items:chunk});chunk=[];weight=0}chunk.push(item);weight+=cost}if(chunk.length)panels.push({title:g.title+(panels.some(p=>p.base===g.title)?' (cont.)':''),base:g.title,items:chunk})}const panel=p=>p?'<section><h2>'+esc(p.title)+'</h2><small>'+esc(date)+'</small><table><colgroup><col style="width:16mm"><col style="width:68mm"><col style="width:21mm"><col style="width:25mm"></colgroup><thead><tr><th>Cant.</th><th>Producto</th><th>Precio</th><th>Puesto</th></tr></thead><tbody>'+p.items.map(x=>'<tr><td><b>'+esc(x.quantity)+'</b></td><td>'+esc(x.product)+'</td><td>'+((x.prices||[]).map(v=>esc(String(v??''))||'&nbsp;').join('<br>'))+'</td><td>'+((x.suppliers||[]).map(v=>esc(String(v??''))||'&nbsp;').join('<br>'))+'</td></tr>').join('')+'</tbody></table></section>':'<section></section>';let html='';for(let i=0;i<panels.length;i+=2)html+='<article>'+panel(panels[i])+panel(panels[i+1])+'</article>';w.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>SG · Pedidos 13 cm</title><style>@page{size:A4 landscape;margin:7mm 13.5mm}*{box-sizing:border-box}body{margin:0;font:12pt Arial;color:#000}article{position:relative;display:grid;grid-template-columns:130mm 130mm;gap:10mm;width:270mm;min-height:194mm;break-after:page}article:last-child{break-after:auto}article:after{content:"";position:absolute;left:135mm;top:0;bottom:0;border-left:0.2mm dashed #888}section{width:130mm}h2{font-size:17pt;margin:0 0 1mm;text-align:center}small{display:block;text-align:center;margin-bottom:2mm}table{width:130mm;table-layout:fixed;border-collapse:collapse}td,th{border-bottom:.2mm solid #aaa;text-align:left;padding:.8mm;overflow-wrap:anywhere}td{height:8mm}th{font-size:10pt}td:nth-child(3),td:nth-child(4){border-left:.2mm solid #aaa}tr{break-inside:avoid}@media print{button{display:none}}</style><button onclick="window.print()">Imprimir / Guardar PDF</button>'+html+'</html>');w.document.close();w.focus();setTimeout(()=>w.print(),300)};
+function printOrders(client,date){const list=records.orders.filter(r=>d(r).date===date&&(!client||d(r).clientId===client)&&!['Cancelado','Anulado'].includes(d(r).status));if(!list.length)return toast('No hay pedidos para esa selección');const groups=new Map();for(const r of list){const x=d(r);if(!groups.has(x.clientId))groups.set(x.clientId,[]);groups.get(x.clientId).push(x)}window.sgPrintPanels([...groups].map(([id,items])=>({title:d(records.clients.find(r=>r.id===id)).name||'Cliente',items:items.map(x=>({quantity:String(x.boxes??'')+' '+(x.quantityUnit==='pales'?'P':x.quantityUnit==='cajas'?'C':''),product:[x.product,x.variety,x.notes].filter(Boolean).join(' · ')}))})),date)}
+window.sgPrintPanels=function(groups,date){const w=window.open('','_blank');if(!w)return toast('Permite ventanas emergentes para imprimir');const panels=[];for(const g of groups){let chunk=[],weight=0;for(const item of g.items){const cost=Math.max(1,Math.ceil(String(item.product).length/23));if(chunk.length&&weight+cost>17){panels.push({title:g.title+(panels.some(p=>p.base===g.title)?' (cont.)':''),base:g.title,items:chunk});chunk=[];weight=0}chunk.push(item);weight+=cost}if(chunk.length)panels.push({title:g.title+(panels.some(p=>p.base===g.title)?' (cont.)':''),base:g.title,items:chunk})}const panel=p=>p?'<section><h2>'+esc(p.title)+'</h2><small>'+esc(date)+'</small><table><colgroup><col style="width:16mm"><col style="width:68mm"><col style="width:21mm"><col style="width:25mm"></colgroup><thead><tr><th>Cant.</th><th>Producto</th><th>Precio</th><th>Puesto</th></tr></thead><tbody>'+p.items.map(x=>'<tr><td><b>'+esc(x.quantity)+'</b></td><td>'+esc(x.product)+'</td><td></td><td></td></tr>').join('')+'</tbody></table></section>':'<section></section>';let html='';for(let i=0;i<panels.length;i+=2)html+='<article>'+panel(panels[i])+panel(panels[i+1])+'</article>';w.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>SG · Pedidos 13 cm</title><style>@page{size:A4 landscape;margin:7mm 13.5mm}*{box-sizing:border-box}body{margin:0;font:12pt Arial;color:#000}article{position:relative;display:grid;grid-template-columns:130mm 130mm;gap:10mm;width:270mm;min-height:194mm;break-after:page}article:last-child{break-after:auto}article:after{content:"";position:absolute;left:135mm;top:0;bottom:0;border-left:0.2mm dashed #888}section{width:130mm}h2{font-size:17pt;margin:0 0 1mm;text-align:center}small{display:block;text-align:center;margin-bottom:2mm}table{width:130mm;table-layout:fixed;border-collapse:collapse}td,th{border-bottom:.2mm solid #aaa;text-align:left;padding:.8mm;overflow-wrap:anywhere}td{height:8mm}th{font-size:10pt}td:nth-child(3),td:nth-child(4){border-left:.2mm solid #aaa}tr{break-inside:avoid}@media print{button{display:none}}</style><button onclick="window.print()">Imprimir / Guardar PDF</button>'+html+'</html>');w.document.close();w.focus();setTimeout(()=>w.print(),300)};
 const old=orders;orders=function(){return '<div class="card"><button class="secondary" onclick="sgPrint82()">Imprimir pedidos / PDF</button></div>'+old()};window.sgPrint82=()=>printOrders(sgSelectedClient(),sgClientDate());
 function voice(msg){const q=msg.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();if(!/^(?:aguacatin[, ]+)?(?:imprime|imprimir|saca en papel)\b/.test(q))return false;const matches=records.clients.filter(r=>{const name=String(d(r).name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();return name.split(/\s+/).some(t=>t.length>2&&new RegExp('(?:^|\\s)'+t.replace(/[^a-z0-9]/g,'')+'(?:$|[\\s.,])').test(q))});if(matches.length>1||(!matches.length&&!/todos|seleccion|actual/.test(q))||/pendiente|patatas|cebollas|ayer|manana/.test(q)){toast('Selecciona cliente y fecha en Pedidos y pulsa Imprimir');return true;}printOrders(matches[0]?.id||(/todos/.test(q)?'':sgSelectedClient()),/hoy|esta noche/.test(q)?today():sgClientDate());return true;}
 for(const [fn,id] of [['aguSend','aguFloatInput'],['askAgu','aguQuestion']]){const prev=window[fn];window[fn]=async()=>{const e=$(id);if(e?.value&&voice(e.value)){e.value='';return}return prev?.()}}})();</script><style>.sgMineSelected{background:#fff0a0!important;color:#473700!important}.sgMineLine{padding:10px;border-bottom:1px solid #ddd}.sgMineLine button{margin:4px}</style><script id="sg-personal-buy">(()=>{
@@ -911,4 +890,4 @@ settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<d
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
-</script><style>#aguFloat.aguExpanded #aguAvatar{width:145px!important;height:min(190px,27dvh)!important}</style></body></html>
+</script></body></html>
