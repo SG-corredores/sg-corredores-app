@@ -1,4 +1,4 @@
-export const version = "10.0.0-rc.4";
+export const version = "10.0.0-rc.5";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",

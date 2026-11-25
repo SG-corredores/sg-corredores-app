@@ -33,7 +33,7 @@
 #dailySheet>h2{font-size:1.25rem;margin:.05rem 0 .45rem}
 #dailySheet{padding:.6rem}
 #dailySheet .dailyCell[data-field="supplier"]{touch-action:pan-y;user-select:none;-webkit-touch-callout:none}
-#dailySheet .sgMinePick{font-size:.7rem;min-height:30px;padding:.25rem;margin:.12rem 0}
+#dailySheet td .dailyCell{min-height:44px;margin:0;padding:.3rem .23rem;font-weight:700}
 #dailySheet .sg10-sheet-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem;align-items:center;margin-bottom:.55rem}
 #dailySheet .sg10-sheet-filters>*{margin:0;font-size:.9rem;min-width:0}
 #dailySheet .sg10-sheet-filters select,#dailySheet .sg10-sheet-filters input{width:100%}
@@ -47,7 +47,7 @@
   #app :is(.primary,.secondary),#login :is(.primary,.secondary){font-size:15px}
   #app>#nav button{font-size:clamp(13px,3.35vw,15px)}
   #dailySheet table,#dailySheet td .dailyCell{font-size:15px}
-  #dailySheet .sgMinePick,#sgClientNav .sgNavRow select,#sgClientNav>input,
+  #sgClientNav .sgNavRow select,#sgClientNav>input,
   #dailySheet .sg10-sheet-filters>*{font-size:15px}
 }
 
@@ -55,7 +55,6 @@
   #aguFloat:not(.aguExpanded){width:58px!important;max-width:58px!important;bottom:66px;right:4px}
   #aguFloat:not(.aguExpanded) #aguAvatar{width:58px!important;height:77px!important}
 }
-.sg10-form-hidden{display:none!important}
 .sg10-walkie{position:fixed;right:1rem;bottom:4rem;background:#f4fbf6;color:#163b27;border:1px solid #b7d2c0;border-radius:12px;padding:.7rem;z-index:1010;width:min(310px,calc(100vw - 1.3rem));box-shadow:0 8px 24px #183e2980}
 .sg10-walkie-drag{touch-action:none;font-weight:800;cursor:move}.sg10-walkie [data-ptt]{touch-action:none}.sg10-walkie [data-ptt]:active{background:#b3e2c0}
 #content label[hidden],#dailySheet button[hidden]{display:none!important}

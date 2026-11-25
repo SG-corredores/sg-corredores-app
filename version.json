@@ -1,6 +1,7 @@
 {
-  "version":"10.0.0-rc.4",
+  "version":"10.0.0-rc.5",
   "news":[
+    "Pedidos en una tabla compacta con producto, cantidad, precio y puesto.",
     "Acceso directo a la Zona Clientes para el administrador en modo solo lectura.",
     "Cierre de Aguacatín con pulsación larga y botón discreto. Vuelve la voz elegida para el personaje.",
     "Botón flotante del walkie: mantén pulsado para hablar.",

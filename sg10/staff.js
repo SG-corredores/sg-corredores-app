@@ -63,30 +63,20 @@ function updateNav() {
   $("sgBackBar")?.classList.toggle("sg10-back",Boolean(editing) || !["inicio","hoja","pedidos","compras","cargas"].includes(page));
 }
 
-let formOpen = false;
-function orderToolbar(element, daily) {
+function orderToolbar(element) {
   const bar = document.createElement("div");
   bar.className = "sg10-page-tools";
   bar.innerHTML = '<button type="button" class="primary" data-new>+ Nuevo pedido</button>'
-    + '<details><summary>Más opciones</summary><div class="sg10-tools"><button type="button" data-other>'
-    + (daily ? 'Ver lista de pedidos' : 'Ver hoja diaria') + '</button><button type="button" data-import>Importar de WhatsApp</button>'
+    + '<details><summary>Más opciones</summary><div class="sg10-tools"><button type="button" data-import>Importar de WhatsApp</button>'
     + '<button type="button" data-print>Imprimir pedidos / PDF</button></div></details>';
   const keepDailySelection = () => {
-    if (!daily) return;
     sgNavDate = val("dailyDate") || today();
     sgNavClient = val("dailyClient");
   };
   bar.querySelector("[data-new]").onclick = () => {
     keepDailySelection();
-    formOpen = true;
     go("pedidos");
     requestAnimationFrame(()=>$("oProduct")?.focus());
-  };
-  bar.querySelector("[data-other]").onclick = () => {
-    keepDailySelection();
-    formOpen = false;
-    go(daily ? "pedidos" : "hoja");
-    if (daily) { formOpen = false; simpleOrderForm(); }
   };
   bar.querySelector("[data-import]").onclick = () => { keepDailySelection();window.sgImportOpen(); };
   bar.querySelector("[data-print]").onclick = () => { keepDailySelection();window.sgPrint82(); };
@@ -109,7 +99,7 @@ function decorateDaily() {
     holder.hidden=true;
     holder.classList.add("sg10-sheet-extra");
   }
-  orderToolbar(sheet,true);
+  orderToolbar(sheet);
   const dailyOptions=sheet.querySelector(".sg10-page-tools .sg10-tools");
   const previous=document.createElement("button");
   const next=document.createElement("button");
@@ -117,7 +107,8 @@ function decorateDaily() {
   previous.textContent="Cliente anterior";next.textContent="Cliente siguiente";
   previous.onclick=()=>sheet.querySelector("#dailyPrev")?.click();
   next.onclick=()=>sheet.querySelector("#dailyNext")?.click();
-  dailyOptions.append(previous,next);
+  const refresh = sheet.querySelector("#dailyRefresh");
+  dailyOptions.append(previous,next,refresh);
   if(reverse) {
     const label=reverse.closest("label");
     label.hidden=false;
@@ -148,12 +139,9 @@ function decorateDaily() {
 }
 new MutationObserver(decorateDaily).observe($("content"),{childList:true});
 function simpleOrderForm() {
-  const content=$("content");
   if(page!=="pedidos")return;
   const form=$("oProduct")?.closest(".card");
-  if(!content.querySelector(".sg10-page-tools"))orderToolbar(content,false);
   if(!form)return;
-  form.classList.toggle("sg10-form-hidden",!formOpen&&!editing);
   if(form.querySelector(".sg10-advanced"))return;
   const advanced=document.createElement("details");
   advanced.className="sg10-advanced";
@@ -202,13 +190,14 @@ function goToNotice(row) {
     const item = d(get(collection,row.record_id));
     sgNavDate = item.date || today();
     sgNavClient = item.clientId;
-    go(row.target);
+    go(collection === "orders" ? "hoja" : row.target);
     if (editing) return;
-    const card = [...document.querySelectorAll("[data-sg10-record]")].find(node => node.dataset.sg10Record === row.record_id);
+    const card = [...document.querySelectorAll("[data-sg10-record],[data-order-id]")].find(node => (node.dataset.sg10Record ?? node.dataset.orderId) === row.record_id);
     if (card) {
       card.classList.add("sg10-highlight");
       card.scrollIntoView({block:"center"});
-    } else edit(collection,row.record_id);
+    } else if(collection === "orders"){go("pedidos");edit(collection,row.record_id);}
+    else edit(collection,row.record_id);
     return;
   }
   if (row.target === "comisiones") sgComClient = row.client_id;
@@ -241,7 +230,7 @@ function connectScope() {
         if (key !== scope || document.hidden) return;
         await sync(true);
         const active = document.activeElement;
-        if (!editing && !document.querySelector("dialog[open]") &&
+        if (!editing && !document.querySelector("dialog[open], #dailyDialog:not([hidden])") &&
             !active?.matches("input,select,textarea") && ["inicio","pedidos","hoja","compras","cargas","consultar"].includes(page) &&
             !hasDraft()) render();
       },380);
@@ -329,14 +318,6 @@ function decorate() {
       panel.append(label);
     }
     panel.append(feedback);
-    if (collection === "orders" && data.quantityUnit === "pales") {
-      const split = document.createElement("button");
-      split.className = "secondary";
-      split.type = "button";
-      split.textContent = "Repartir entre puestos";
-      split.onclick = () => window.sg10Ops("splitPurchase",id);
-      panel.append(split);
-    }
     card.append(panel);
   }
   if (page === "pedidos" && $("oUnit")) {
@@ -502,7 +483,6 @@ go = function (target) {
     operations.afterRender(page);
     return;
   }
-  if (target === "pedidos" && page !== "pedidos" && !formOpen) formOpen = true;
   return originalGo(target);
 };
 
