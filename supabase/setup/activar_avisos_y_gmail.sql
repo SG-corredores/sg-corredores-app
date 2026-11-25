@@ -1,11 +1,11 @@
--- Run once as postgres after creating Vault secret sg10_worker_secret.
--- The Vault value must match Edge Function secret SG10_WORKER_SECRET.
+-- Run as postgres after applying both migrations and verifying the two workers.
+-- Worker authentication uses the same secret in Vault and in the scheduled request.
 begin;
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 do $$
 begin
-  if not exists(select 1 from vault.decrypted_secrets where name='sg10_worker_secret') then
+  if not exists(select 1 from vault.decrypted_secrets where name='sg10_worker_secret' and decrypted_secret ~ '^[a-f0-9]{64}$') then
     raise exception 'Crea primero el secreto sg10_worker_secret en Vault.';
   end if;
 end $$;

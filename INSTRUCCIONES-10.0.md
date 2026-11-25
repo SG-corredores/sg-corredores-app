@@ -30,7 +30,7 @@ La integración de GitHub devolvió HTTP 403 tanto al crear una rama como al esc
 
 1. En GitHub, abre `SG-corredores/sg-corredores-app` como propietario. Guarda o publica una rama de respaldo desde `main`. Conserva la rama y el ZIP de esta entrega para revertir la web con un commit de reversión si fuera necesario.
 2. En [Supabase → Backups](https://supabase.com/dashboard/project/zyzcnosaavvcijsmcowq/database/backups), comprueba el respaldo y su fecha. Si el plan no permite descargar un respaldo, usa Supabase CLI con acceso autorizado a la base para hacer un volcado de esquema y datos y guárdalo fuera del repositorio público. Exporta los archivos de Storage por separado si hay objetos que conservar. No subas datos o claves a GitHub.
-3. En [Supabase → SQL Editor](https://supabase.com/dashboard/project/zyzcnosaavvcijsmcowq/sql/new), pega el archivo completo `supabase/migrations/20261125190000_sg10.sql` y pulsa **Run** una sola vez. Es una transacción: ante un error, revisa el mensaje antes de volver a ejecutarla. El SQL añadido usa las tablas que la app tiene en ese proyecto, así que aplicar solo los archivos web dejaría funciones incompletas.
+3. En [Supabase → SQL Editor](https://supabase.com/dashboard/project/zyzcnosaavvcijsmcowq/sql/new), pega primero `supabase/migrations/20261125190000_sg10.sql` y después `supabase/migrations/20261125193500_sg10_worker_context.sql`, ejecutando cada migración una sola vez. Es una transacción: ante un error, revisa el mensaje antes de volver a ejecutarla. El SQL añadido usa las tablas que la app tiene en ese proyecto, así que aplicar solo los archivos web dejaría funciones incompletas.
 4. En [Supabase → URL Configuration](https://supabase.com/dashboard/project/zyzcnosaavvcijsmcowq/auth/url-configuration), añade exactamente `https://sg-corredores.github.io/sg-corredores-app/portal.html` a las URL de redirección permitidas. Conserva las URL permitidas que ya existan.
 5. Desde la carpeta `app/` extraída del ZIP, despliega las funciones con la CLI. Si prefieres Dashboard, crea las cinco funciones con los nombres exactos y pega su respectivo `index.ts`. Las tres rutas de usuario validan el token con Supabase Auth dentro de la función en cada petición. Los dos procesos de fondo comprueban un secreto de servidor.
 
@@ -43,13 +43,13 @@ supabase functions deploy sg10-push --project-ref zyzcnosaavvcijsmcowq --no-veri
 supabase functions deploy sg10-gmail --project-ref zyzcnosaavvcijsmcowq --no-verify-jwt
 ```
 
-6. Completa los secretos en Supabase. Guarda **el mismo valor nuevo, largo y aleatorio** como `SG10_WORKER_SECRET` en Edge Functions y como `sg10_worker_secret` en Vault. Comprueba las claves VAPID existentes, mantenlas si ya funcionan. La clave pública del navegador debe corresponder a `VAPID_PRIVATE_KEY` y a las suscripciones. Revisa estos nombres de secreto:
+6. Completa los secretos en Supabase. Guarda una clave aleatoria de 32 bytes en hexadecimal como `sg10_worker_secret` en Vault. Las funciones validan la clave en el servidor. Comprueba las claves VAPID existentes, mantenlas si ya funcionan. La clave pública del navegador debe corresponder a `VAPID_PRIVATE_KEY` y a las suscripciones. Revisa estos nombres de secreto:
 
 | Para | Claves de servidor |
 |---|---|
-| Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `SG10_WORKER_SECRET` |
-| Gmail automático | `SG10_GMAIL_WORKSPACE` (UUID de la fila de `sg_workspaces`), `SG10_GMAIL_OWNER` (UUID de la cuenta propietaria que autorizó Gmail), `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `OPENAI_API_KEY`, `SG10_WORKER_SECRET` |
-| Gmail opcional | `SG10_GMAIL_ADDRESS` si el buzón autorizado es distinto del ya previsto, `SG10_INVOICE_MODEL` si se quiere otro modelo de extracción |
+| Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| Gmail automático | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `OPENAI_API_KEY` |
+| Gmail opcional | `SG10_GMAIL_WORKSPACE` y `SG10_GMAIL_OWNER` si hay más de un propietario, `SG10_GMAIL_ADDRESS` si cambia el buzón, `SG10_INVOICE_MODEL` si se quiere otro modelo de extracción |
 | Aguacatín | `OPENAI_API_KEY`; opcionales `SG10_FAST_MODEL` y `SG10_REASONING_MODEL`, con valores predeterminados `gpt-6.2-sol` y `gpt-6.2-astra` |
 | Walkie | `LIVEKIT_URL` (wss), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` de tu instancia LiveKit |
 

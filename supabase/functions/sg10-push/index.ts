@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.89.0";
+import { authenticateWorker } from "../_shared/sg10-worker.ts";
 import webpush from "npm:web-push@3.6.7";
 
 type Job = { job_id: number; token: string; endpoint: string | null; p256dh: string; auth_key: string; kind: string; event_id: number; portal: boolean; client_name: string | null; article: string | null; actor_name: string | null; occurred_at: string };
@@ -22,27 +22,25 @@ function allowedEndpoint(endpoint: string) {
   }
 }
 
-async function equalSecret(a: string, b: string) {
-  const encode = (v: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
-  const [left, right] = await Promise.all([encode(a), encode(b)]);
-  return new Uint8Array(left).reduce((diff, value, index) => diff | (value ^ new Uint8Array(right)[index]), 0) === 0;
-}
-
 Deno.serve(async (request) => {
-  const secret = Deno.env.get("SG10_WORKER_SECRET");
   if (request.method !== "POST") return new Response(null, { status: 405 });
-  if (!secret || !(await equalSecret(request.headers.get("x-sg-worker") ?? "", secret))) {
-    return new Response(null, { status: 401 });
-  }
+  const worker = await authenticateWorker(request);
+  if (!worker) return new Response(null, { status: 401 });
   const vapid = {
     subject: Deno.env.get("VAPID_SUBJECT") ?? "",
     publicKey: Deno.env.get("VAPID_PUBLIC_KEY") ?? "",
     privateKey: Deno.env.get("VAPID_PRIVATE_KEY") ?? "",
   };
   if (!vapid.subject || !vapid.publicKey || !vapid.privateKey) return Response.json({ error: "Faltan secretos VAPID." }, { status: 503 });
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
-    auth: { persistSession: false },
-  });
+  const { db, checkOnly } = worker;
+  if (checkOnly) {
+    try {
+      webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+      return Response.json({ ready: true, public_key: vapid.publicKey });
+    } catch {
+      return Response.json({ error: "Configuración VAPID no válida." }, { status: 503 });
+    }
+  }
   const { data, error } = await db.rpc("sg10_claim_push", { p_limit: 24 });
   if (error) return Response.json({ error: error.code }, { status: 500 });
   const timestamp=new Intl.DateTimeFormat("es-ES",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Madrid"});
