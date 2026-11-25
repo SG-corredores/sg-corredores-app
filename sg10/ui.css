@@ -72,3 +72,21 @@
 .sg10-invoice-observations{margin:.8rem 0;padding:.75rem;border:1px solid #c4d8cb;border-radius:10px;background:#edf5ef}
 .sg10-invoice-observations h3{margin:0 0 .35rem}
 .sg10-invoice-observations textarea{box-sizing:border-box;width:100%}
+
+.sg10-photo-preview{display:block;max-width:100%;width:min(100%,22rem);height:auto;max-height:28vh;object-fit:contain;margin:.5rem 0 .85rem;border-radius:10px}
+.sg10-photo-preview[hidden]{display:none}
+.sg10-dialog details summary{cursor:pointer;color:#17482e;font-weight:700;margin:.55rem 0}
+
+
+#purchaseSheet{padding:.6rem}
+#purchaseSheet table{width:100%;border-collapse:collapse;table-layout:fixed}
+#purchaseSheet th,#purchaseSheet td{text-align:left;padding:3px 2px}
+#purchaseSheet thead th:first-child{width:48%}
+#purchaseSheet thead th:nth-child(2){width:26%}
+#purchaseSheet .dailyCell{display:block;width:100%;min-height:44px;margin:0;padding:.3rem .23rem;border:1px solid #b5c8ba;border-radius:5px;color:#183d29;font-size:15px;font-weight:700;white-space:normal;overflow-wrap:anywhere;text-align:left}
+#purchaseSheet .dailyCell[data-focus=pSupplier]{touch-action:pan-y;user-select:none;-webkit-touch-callout:none}
+#purchaseSheet .done .dailyCell{background:#e4f5e8}
+#purchaseSheet .pending .dailyCell{background:#fff8eb}
+#purchaseSheet .purchase-company th{padding:.55rem .2rem .3rem;color:#27513c;border-bottom:1px solid #d6e2d9}
+
+#toast{pointer-events:none}

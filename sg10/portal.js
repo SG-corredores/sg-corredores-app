@@ -1,19 +1,29 @@
+import { installCarousel } from "./portal-carousel.js";
 import { openInvitation, publicConfig, esc, madridDate, validNumber, invoke, attachInbox, detachPush, version } from "./common.js";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
 const orderStatus = (message) => { element("order-status").textContent = message; };
-const navigation = [...document.querySelectorAll(".portal-nav a")];
-function markSection() {
-  const active = navigation.find(link => link.isConnected && link.hash === location.hash)
-    ?? navigation[0];
-  for (const link of navigation) {
-    if (link === active) link.setAttribute("aria-current","location");
-    else link.removeAttribute("aria-current");
-  }
+const sections = [...document.querySelectorAll("[data-portal-section]")];
+function showSection(moveFocus = false) {
+  const section = sections.find(item => "#"+item.id === location.hash);
+  for (const item of sections) item.hidden = item !== section;
+  element("portal-home").hidden = Boolean(section);
+  element("portal-back").hidden = !section;
+  if (!moveFocus || element("portal").hidden) return;
+  const heading = (section ?? element("portal-home")).querySelector("h2");
+  heading.tabIndex = -1;
+  heading.focus({preventScroll:true});
+  window.scrollTo(0,0);
 }
-window.addEventListener("hashchange",markSection);
-markSection();
+window.addEventListener("hashchange",() => showSection(true));
+showSection();
+function goToSection(id) {
+  const hash = "#" + id;
+  if (location.hash === hash) showSection(true);
+  else { location.hash = hash; showSection(); }
+}
+const refreshCarousel = installCarousel(element("gallery-list"),element("gallery-track"),element("gallery-items"),element("gallery-motion"));
 const params = new URLSearchParams(location.search);
 const previewMode = params.has("vista") || params.has("empresa");
 const previewMembership = previewMode ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
@@ -30,6 +40,7 @@ const api = window.supabase?.createClient(config.url, config.key, {
 });
 if (invitation?.token) status("Invitación de cliente. Introduce el correo al que va dirigida.");
 let user, membership, memberships = [], inbox, request, gallery = [], galleryVersion = 0, refreshVersion = 0;
+let gallerySignature = "";
 let lineCounter = 0;
 let history = [];
 const selected = () => membership ? { workspace: membership.workspace_id, company: membership.client_id } : null;
@@ -122,19 +133,32 @@ async function loadGallery() {
     .order("updated_at",{ascending:false}).limit(40);
   if (revision !== galleryVersion) return;
   if (error) throw error;
-  const loaded = await Promise.all(data.map(async row => {
-    const result = await api.storage.from("sg10-productos").createSignedUrl(row.image_path,120);
-    return { ...row, url: result.data?.signedUrl };
-  }));
+  const paths = [...new Set(data.map(row => row.image_path))];
+  const signed = paths.length ? await api.storage.from("sg10-productos").createSignedUrls(paths,180) : {data:[]};
   if (revision !== galleryVersion) return;
-  gallery = loaded;
-  element("gallery-list").innerHTML = gallery.map(row => {
+  if (signed.error) throw signed.error;
+  const urls = new Map(signed.data.map(item => [item.path,item.signedUrl]));
+  gallery = data.flatMap(row => urls.get(row.image_path) ? [{...row,url:urls.get(row.image_path)}] : []);
+  element("gallery-message").textContent = gallery.length ? "" : data.length ? "No se pudieron cargar las fotografías." : "Aún no hay fotografías publicadas.";
+  element("gallery-list").hidden = !gallery.length;
+  const signature = JSON.stringify(gallery.map(({url,...row}) => row));
+  if (signature === gallerySignature) {
+    const galleryUrls = new Map(gallery.map(row => [row.id,row.url]));
+    for (const item of element("gallery-track").querySelectorAll("[data-photo] img")) {
+      const url = galleryUrls.get(item.closest("[data-photo]").dataset.photo);
+      if (url) item.src = url;
+    }
+    return;
+  }
+  gallerySignature = signature;
+  element("gallery-items").innerHTML = gallery.map(row => {
     const name = row.product?.trim();
     return '<article><button type="button" data-photo="' + esc(row.id) + '" aria-label="' + esc(name || "Ver fotografía")
-      + '">' + (row.url ? '<img alt="" loading="lazy" src="' + esc(row.url) + '">' : '')
+      + '"><img alt="" decoding="async" src="' + esc(row.url) + '">'
       + (name ? '<strong>' + esc(name) + '</strong>' : '')
-      + (row.price == null ? '' : '<small>' + esc(row.price + " €/" + row.unit) + '</small>') + '</button></article>';
-  }).join("") || "<p>Sin fotografías publicadas.</p>";
+      + (row.price == null ? '' : '<small>' + esc(euro.format(row.price) + "/" + row.unit) + '</small>') + '</button></article>';
+  }).join("");
+  refreshCarousel();
 }
 element("gallery-list").onclick = ({target}) => {
   const row = gallery.find(row => row.id === target.closest("button")?.dataset.photo);
@@ -154,19 +178,10 @@ element("gallery-list").onclick = ({target}) => {
     else addLine({product:row.product});
     request = null;
     element("photo").close();
-    element("pedidos").scrollIntoView({behavior:"smooth"});
+    goToSection("pedidos");
   };
   element("photo").showModal();
 };
-const galleryRow = element("gallery-list");
-setInterval(() => {
-  if (document.hidden || matchMedia("(prefers-reduced-motion: reduce)").matches || galleryRow.matches(":hover,:focus-within")) return;
-  if (galleryRow.scrollWidth <= galleryRow.clientWidth) return;
-  const next = galleryRow.scrollLeft + 180;
-  galleryRow.scrollTo({left:next >= galleryRow.scrollWidth ? 0 : next,behavior:"smooth"});
-  if (galleryRow.scrollLeft + galleryRow.clientWidth >= galleryRow.scrollWidth - 5) galleryRow.scrollTo({left:0,behavior:"smooth"});
-},3800);
-
 if (!previewMode) element("interpret").onclick = async ({currentTarget:button}) => {
   const scope = selected();
   const text = element("source").value.trim();
@@ -245,9 +260,8 @@ if (!previewMode) element("assistant-form").onsubmit = async (event) => {
   finally { button.disabled = false; }
 };
 if (previewMode) {
-  element("portal-order-link").remove();
-  element("pedidos").remove();
-  element("assistant-section").remove();
+  element("pedidos").innerHTML = '<h2>Pedidos</h2><p>Desde aquí, el cliente puede escribir o dictar un pedido.</p><a href="#history">Consultar pedidos existentes</a>';
+  element("assistant-section").innerHTML = '<h2>Consultar producto</h2><p>Desde aquí, el cliente puede preguntar a Aguacatín por sus pedidos y compras.</p>';
 }
 async function openCompany(index) {
   inbox?.close();
@@ -258,18 +272,20 @@ async function openCompany(index) {
   element("history-list").replaceChildren();
   element("invoice-list").replaceChildren();
   element("commission-list").replaceChildren();
-  element("gallery-list").replaceChildren();
+  gallerySignature = "";
+  element("gallery-items").replaceChildren();
+  refreshCarousel();
   element("assistant-answer").replaceChildren();
   inbox = attachInbox({
     api,space:membership.workspace_id,user:user.id,button:element("open-inbox"),panel:element("inbox"),portal:true,
     onOpen:async row => {
-      if (row.target === "galeria") return element("galeria").scrollIntoView();
-      element("history").scrollIntoView();
+      if (row.target === "galeria") return goToSection("inicio");
+      goToSection(row.target === "comisiones" ? "comisiones" : row.target === "facturas" ? "facturas" : "history");
       const recordElement = [...document.querySelectorAll("[data-record]")].find(item => item.dataset.record === row.record_id);
-      if (recordElement) {
+      if (recordElement && !element("history").hidden) requestAnimationFrame(() => {
         recordElement.classList.add("sg10-highlight");
         recordElement.scrollIntoView({block:"center"});
-      }
+      });
     },
     onChange:() => Promise.all([refresh(),loadGallery()]).catch(error => status(error.message)),
   });
@@ -293,8 +309,9 @@ async function connect() {
       throw error;
     }
     element("portal").hidden = false;
+    document.querySelector(".portal-entry").hidden = true;
     try { await loadGallery(); } catch {
-      element("gallery-list").textContent = "No se pudieron cargar las fotografías.";
+      element("gallery-message").textContent = "No se pudieron cargar las fotografías.";
     }
     return;
   }
@@ -318,6 +335,7 @@ async function connect() {
   element("login").hidden = true;
   element("session-tools").hidden = false;
   element("portal").hidden = false;
+  document.querySelector(".portal-entry").hidden = true;
   element("spaces-label").hidden = memberships.length < 2;
   element("spaces").replaceChildren(...memberships.map((row,index) => new Option("Empresa " + (index + 1),index)));
   for (let index = 0; index < memberships.length; index++) {

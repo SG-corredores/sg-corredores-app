@@ -13,6 +13,31 @@ async function digest(value) {
   return bytesHex(await crypto.subtle.digest("SHA-256",buffer));
 }
 
+async function prepareGalleryPhoto(file) {
+  if (file.size > 31_457_280) throw Error("La foto supera 30 MB. Elige una versión más pequeña.");
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    try { await image.decode(); }
+    catch { throw Error("El móvil no pudo abrir esta imagen. Prueba con una foto JPEG, PNG o WebP."); }
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth,image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1,Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1,Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d",{alpha:false});
+    if (!context) throw Error("No se pudo preparar la fotografía.");
+    context.fillStyle = "#fff";
+    context.fillRect(0,0,canvas.width,canvas.height);
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    const imageBlob = await new Promise(resolve => canvas.toBlob(resolve,"image/jpeg",.87));
+    if (!imageBlob || imageBlob.size > 5_242_880) throw Error("No se pudo reducir el tamaño de la fotografía.");
+    return imageBlob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function openDialog(title) {
   document.querySelector("dialog.sg10-dialog[open]")?.close();
   const dialog = document.createElement("dialog");
@@ -133,16 +158,31 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const dialog = openDialog(existing ? "Editar publicación" : "Publicar fotografía");
     const content = dialog.querySelector("[data-content]");
     const clientOptions = renderOptions(state().records.clients,existing?.client_id);
-    content.innerHTML = '<form><label>Foto JPEG, PNG o WebP <input name="image" type="file" accept="image/jpeg,image/png,image/webp" '
-      + (!existing ? "required" : "") + '></label><label>Producto (opcional) <input name="product" maxlength="120" value="' + esc(existing?.product)
-      + '"></label><label>Descripción y observaciones (opcional) <textarea name="description" maxlength="1000">' + esc(existing?.description)
-      + '</textarea></label><label>Precio opcional <input name="price" inputmode="decimal" value="' + esc(existing?.price)
+    content.innerHTML = '<form><label>Elige una foto <input name="image" type="file" accept="image/*" '
+      + (!existing ? "required" : "") + '></label><img class="sg10-photo-preview" alt="Vista previa de la foto" hidden>'
+      + '<button type="submit" class="primary">' + (existing ? 'Guardar cambios' : 'Publicar foto') + '</button><p role="status" aria-live="polite"></p>'
+      + '<details' + (existing ? ' open' : '') + '><summary>Detalles y visibilidad</summary>'
+      + '<label>Producto (opcional) <input name="product" maxlength="120" value="' + esc(existing?.product)
+      + '"></label><label>Descripción (opcional) <textarea name="description" maxlength="1000">' + esc(existing?.description)
+      + '</textarea></label><label>Precio (opcional) <input name="price" inputmode="decimal" value="' + esc(existing?.price)
       + '"></label><label>Unidad <select name="unit"><option value="">Seleccionar</option><option>kg</option><option>caja</option><option>palé</option><option>unidad</option></select></label>'
       + '<label>Visibilidad <select name="clients"' + (existing ? '' : ' multiple size="4"') + '><option value=""'
-      + (!existing?.client_id ? ' selected' : '') + '>Todos los clientes</option>' + clientOptions
-      + '</select></label><button>' + (existing ? 'Guardar cambios' : 'Publicar foto') + '</button><p role="status"></p></form>';
+      + (!existing?.client_id ? ' selected' : '') + '>Todos los clientes</option>' + clientOptions + '</select></label></details></form>';
     const form = content.querySelector("form");
     form.elements.unit.value = existing?.unit ?? "";
+    const preview = form.querySelector(".sg10-photo-preview");
+    let previewUrl;
+    function releasePreview() { if (previewUrl) URL.revokeObjectURL(previewUrl); }
+    dialog.addEventListener("close",releasePreview,{once:true});
+    form.elements.image.onchange = () => {
+      releasePreview();
+      const file = form.elements.image.files[0];
+      previewUrl = file ? URL.createObjectURL(file) : null;
+      preview.hidden = true;
+      preview.onload = () => { preview.hidden = false; };
+      if (previewUrl) preview.src = previewUrl;
+      else preview.removeAttribute("src");
+    };
     const started = scope();
     form.onsubmit = async (event) => {
       event.preventDefault();
@@ -159,17 +199,18 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       if (raw && (!Number.isFinite(price) || !unit || !/^\d+(?:[.,]\d{1,2})?$/.test(raw))) {
         return feedback.textContent = "Revisa el precio y elige una unidad.";
       }
-      if (file && (file.size>5_242_880 || !["image/webp","image/jpeg","image/png"].includes(file.type))) {
-        return feedback.textContent = "Selecciona una fotografía JPEG, PNG o WebP de hasta 5 MB.";
-      }
       let path = existing?.image_path;
       let uploaded = false;
       event.submitter.disabled = true;
+      feedback.textContent = file ? "Preparando la fotografía…" : "Guardando los cambios…";
       try {
         if (file) {
-          path = workspace + "/" + crypto.randomUUID() + "." + file.type.split("/")[1];
-          const upload = await api.storage.from("sg10-productos").upload(path,file,{contentType:file.type,upsert:false});
-          if (upload.error) throw upload.error;
+          const photo = await prepareGalleryPhoto(file);
+          if (!dialog.open || started !== scope()) return;
+          path = workspace + "/" + crypto.randomUUID() + ".jpg";
+          feedback.textContent = "Subiendo la fotografía…";
+          const upload = await api.storage.from("sg10-productos").upload(path,photo,{contentType:photo.type,upsert:false});
+          if (upload.error) throw Error("No se pudo subir la foto. " + upload.error.message);
           uploaded = true;
         }
         const fields = {workspace_id:workspace,product:get("product"),description:get("description"),image_path:path,
@@ -182,6 +223,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         uploaded = false;
         if (existing && path !== existing.image_path) await removeOrphan(api,workspace,existing.image_path);
         dialog.close();
+        toast(existing ? "Publicación actualizada." : "Foto publicada en la Zona Clientes.");
         await loadGallery();
       } catch (error) {
         if (uploaded) await removeOrphan(api,workspace,path);
@@ -809,7 +851,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     picker?.addEventListener("change",showPallets);
     showPallets();
     const button=document.createElement("button");
-    button.type="button";button.className="secondary";button.textContent="Usar el peso fijo configurado";
+    button.type="button";button.id="sg10FixedWeightButton";button.className="secondary";button.textContent="Usar el peso fijo configurado";
     button.onclick=()=>{
       const company=state().records.clients.find(row=>row.id===document.getElementById("pClient")?.value);
       const product=document.getElementById("pProduct")?.value;
