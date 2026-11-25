@@ -1,3 +1,5 @@
+import { createOrderVoice } from "./order-voice.js";
+
 export const version = "10.0.0-rc.8";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
@@ -84,6 +86,7 @@ export async function detachPush(api, user) {
 }
 
 export function attachInbox({ api, space, user, button, panel, onOpen, onChange, portal }) {
+  const voice = portal ? null : createOrderVoice(space,user);
   let eventRows = [];
   let readThrough = 0;
   let unreadCount = 0;
@@ -94,6 +97,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
     if (!expanded) return;
     panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>Activar push</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
+      + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos de pedidos por voz</label>' : '')
       + '<details><summary>Preferencias de avisos push</summary>' + Object.entries(names).map(([kind,label]) =>
         '<label class="sg10-check"><input type="checkbox" data-kind="' + kind + '"' + (muted.includes(kind) ? '' : ' checked') + '> ' + esc(label) + '</label>').join('') + '</details>'
       + '<p data-message role="status"></p><ul class="sg10-notices">'
@@ -111,6 +115,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     if (!active) return;
     if (events.error || preferences.error) throw events.error ?? preferences.error;
     eventRows = events.data;
+    voice?.update(eventRows);
     muted = preferences.data?.muted ?? [];
     readThrough = preferences.data?.read_through ?? 0;
     const unread = await api.from("sg10_events").select("id",{count:"exact",head:true}).eq("workspace_id",space).gt("id",readThrough);
@@ -158,6 +163,10 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     } catch (error) { errorMessage(error); }
   };
   panel.onchange = ({target}) => {
+    if (target.hasAttribute("data-order-voice")) {
+      voice?.setEnabled(target.checked);
+      return;
+    }
     if (!target.dataset.kind) return;
     const next = new Set(muted);
     if (target.checked) next.delete(target.dataset.kind); else next.add(target.dataset.kind);
@@ -182,7 +191,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     else if (active && !portal) open(true);
   }).catch(errorMessage);
   return { refresh, close() {
-    active = false; clearInterval(timer); api.removeChannel(channel); open(false);
+    active = false; voice?.stop(); clearInterval(timer); api.removeChannel(channel); open(false);
     button.onclick = null; panel.onclick = null; panel.onchange = null;
   } };
 }
