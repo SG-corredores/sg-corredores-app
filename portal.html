@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b27">
+  <title>Zona Clientes · SG Corredores</title>
+  <link rel="icon" href="./icon-192.png">
+  <link rel="manifest" href="./portal.webmanifest">
+  <link rel="stylesheet" href="./sg10/ui.css">
+  <link rel="stylesheet" href="./sg10/portal.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
+  <script type="module" src="./sg10/portal.js"></script>
+</head>
+<body>
+<header>
+  <div class="portal-header">
+    <img alt="SG Corredores" src="./sg10/logotipo.png">
+    <div><strong>SG Corredores</strong><div>Zona Clientes</div></div>
+    <div class="portal-session" id="session-tools" hidden>
+      <button type="button" id="open-inbox" aria-expanded="false">🔔 Avisos</button>
+      <button type="button" id="sign-out">Salir</button>
+    </div>
+  </div>
+</header>
+<main>
+  <section class="panel" id="login">
+    <h1>Accede a tu empresa</h1>
+    <form id="login-form">
+      <label>Correo electrónico <input type="email" id="email" required autocomplete="email"></label>
+      <button>Enviar enlace de acceso</button>
+    </form>
+    <p>Usa el correo asociado a tu empresa.</p>
+  </section>
+  <p id="status" role="status" aria-live="polite"></p>
+  <section id="portal" hidden>
+    <section id="inbox" class="sg10-inbox" hidden aria-label="Avisos"></section>
+    <section class="panel" id="galeria">
+      <div class="company-heading"><h1 id="company-name">Mi empresa</h1><label id="spaces-label" hidden>Empresa <select id="spaces"></select></label></div>
+      <h2>Productos disponibles</h2>
+      <div class="sg10-galleryrow" id="gallery-list" tabindex="0" aria-label="Fotos de productos"></div>
+    </section>
+    <section class="panel" id="pedidos">
+      <h2>Nuevo pedido</h2>
+      <label>Fecha de entrega <input type="date" id="order-date" required></label>
+      <label>Texto del pedido <textarea id="source" rows="3" maxlength="5500" placeholder="10 cajas de tomate pera y 2 palés de patata"></textarea></label>
+      <div class="sg10-tools">
+        <button type="button" id="interpret">Interpretar texto con Aguacatín</button>
+        <button type="button" id="dictate">Dictar pedido</button>
+        <button type="button" id="add-line">Añadir artículo</button>
+      </div>
+      <form id="order-form">
+        <div id="lines"></div>
+        <button type="submit">Confirmar y guardar</button>
+        <p id="order-status" role="status"></p>
+      </form>
+    </section>
+    <section class="panel" id="history">
+      <h2>Historial y compras</h2>
+      <form id="filter" class="sg10-tools">
+        <label>Desde <input type="date" id="from-date" required></label>
+        <label>Hasta <input type="date" id="to-date" required></label>
+        <button>Ver periodo</button>
+      </form>
+      <div id="history-list"></div>
+    </section>
+    <section class="panel" id="facturas"><h2>Facturas autorizadas</h2><div id="invoice-list"></div></section>
+    <section class="panel">
+      <h2>Preguntar a Aguacatín</h2>
+      <form id="assistant-form"><label>Consulta sobre tu empresa <input id="question" required maxlength="500" placeholder="¿Qué se ha comprado hoy?"></label><button>Consultar</button></form>
+      <p id="assistant-answer" role="status"></p>
+    </section>
+    <footer>SG Corredores · <span id="version"></span></footer>
+  </section>
+</main>
+<dialog id="photo" class="sg10-dialog"><div id="photo-content"></div><form method="dialog"><button>Cerrar</button></form></dialog>
+</body>
+</html>
