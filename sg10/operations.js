@@ -67,13 +67,15 @@ function findCompany(doc, clients) {
 function compareInvoice(invoice, purchases, orders) {
   const doc = invoice.invoice_data;
   if (doc.tipo === "abono") return invoice.sg10_original_id ? [] : ["Vincula el abono a la factura original antes de aprobarlo."];
-  const matchesOrder = orders.some(({data}) => doc.client_id && data.clientId === doc.client_id && data.date === doc.fecha
+  const orderLines = orders.filter(({data}) => doc.client_id && data.clientId === doc.client_id && data.date === doc.fecha
     && !["Cancelado","Anulado"].includes(data.status));
   const findings = [];
-  if (!matchesOrder) findings.push("No hay pedido del día asociado a esa empresa.");
+  if (!orderLines.length) findings.push("No hay pedido del día asociado a esa empresa.");
   if (!invoiceKey(doc)) findings.push("Faltan número, fecha o CIF del asentador.");
   if (!Array.isArray(doc.lineas) || !doc.lineas.length) findings.push("El documento no tiene líneas extraídas.");
   for (const line of Array.isArray(doc.lineas) ? doc.lineas : []) {
+    if (orderLines.length && !orderLines.some(({data}) => canonicalProduct(data.product) === canonicalProduct(line.producto)))
+      findings.push((line.producto || "Artículo sin nombre") + " · Sin artículo coincidente en los pedidos del día.");
     const select = purchases.filter(({data:x}) => (doc.client_id && x.clientId === doc.client_id && x.date === doc.fecha
       && !["Anulado","Cancelado"].includes(x.status) && canonicalProduct(x.product) === canonicalProduct(line.producto)));
     if (!select.length) { findings.push((line.producto || "Artículo sin nombre") + " · Sin compra coincidente."); continue; }
@@ -87,6 +89,7 @@ function compareInvoice(invoice, purchases, orders) {
     if (number(line.kilos_netos) && weights.every(x => x>0) && Math.abs(line.kilos_netos-kilos)>0.01)
       findings.push(line.producto + " · Kilos distintos ("+line.kilos_netos+" / "+kilos+").");
     if (number(line.precio) && !rows.some(({data:x}) => (x.priceCents != null || x.price != null)
+      && (!line.unidad_precio || normalized(line.unidad_precio) === normalized(x.priceUnit === "pale" ? "palet" : x.priceUnit))
       && Math.abs(line.precio-(x.priceCents != null ? x.priceCents/100 : Number(x.price)))<0.00001)) {
       findings.push(line.producto + " · Precio distinto o pendiente.");
     }
@@ -339,7 +342,10 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     return '<div class="card"><h2>Facturas de Gmail</h2><div class="sg10-tools">'
       + (roleOwner() ? '<button onclick="sg10Ops(\'importInvoices\',this)">Leer siguiente lote de Gmail</button>' : '')
       + '<button onclick="sg10Ops(\'loadInvoices\')">Actualizar historial</button></div><p id="sg10InvoiceStatus" role="status">'
-      + esc(invoiceError) + '</p><div id="sg10InvoiceBalances"></div><div id="sg10InvoiceList"></div></div>';
+      + esc(invoiceError) + '</p><div class="grid"><label>Buscar factura <input id="sgInvoiceSearch" type="search" placeholder="Cliente, número o asentador"></label>'
+      + '<label>Estado <select id="sgInvoiceFilter"><option value="">Todas</option><option value="pending">Pendientes de revisión</option>'
+      + '<option value="findings">Con incidencias</option><option value="approved">Aprobadas</option></select></label></div>'
+      + '<p id="sgInvoiceCount" role="status"></p><div id="sg10InvoiceBalances"></div><div id="sg10InvoiceList"></div></div>';
   }
   async function loadInvoices() {
     const context=scope();
@@ -362,13 +368,31 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     list.innerHTML=invoiceRows.map(row=>{
       const findings=compareInvoice(row,records.purchases,records.orders);
       const x=row.invoice_data;
-      return '<div class="item" data-invoice="' + esc(row.id) + '"><b>' + (x.tipo==="abono" ? "Abono · " : "")+esc(row.invoice_number || "Sin número")
+      return '<div class="item" data-invoice="' + esc(row.id) + '" data-findings="'+Boolean(findings.length)
+        +'" data-review-state="'+(row.approved_at ? "approved":"pending")+'"><b>' + (x.tipo==="abono" ? "Abono · " : "")+esc(row.invoice_number || "Sin número")
         + '</b> · ' + esc(row.customer_name || "Cliente por identificar") + '<p>' + esc(x.fecha) + ' · ' + esc(x.proveedor)
         + ' · ' + esc(row.approved_at ? "Aprobada" : "Pendiente de revisión") + '</p><p>' + esc(x.total==null ? "Sin importe" : formatting.format(x.total))
         + '</p>' + (findings.length ? '<ul>' + findings.map(item=>'<li>'+esc(item)+'</li>').join("")+'</ul>' : '<p>Sin discrepancias en los datos comparables.</p>')
         + '<button onclick="sg10Ops(\'reviewInvoice\',this.closest(\'[data-invoice]\').dataset.invoice)">Ver'
         + (roleOwner() ? ' y revisar' : '') + '</button></div>';
     }).join("") || "<p>Sin facturas guardadas.</p>";
+    const search=document.getElementById("sgInvoiceSearch"),filter=document.getElementById("sgInvoiceFilter");
+    const count=document.getElementById("sgInvoiceCount");
+    if (search && filter && count) {
+      const apply = () => {
+        const rows = [...list.querySelectorAll("[data-invoice]")];
+        let shown = 0;
+        const query = normalized(search.value);
+        for (const row of rows) {
+          const state = !filter.value || (filter.value === "findings" ? row.dataset.findings === "true" : row.dataset.reviewState === filter.value);
+          row.hidden = !state || !normalized(row.textContent).includes(query);
+          if (!row.hidden) shown++;
+        }
+        count.textContent = shown + " de " + rows.length + " facturas en el historial cargado";
+      };
+      search.oninput = filter.onchange = apply;
+      apply();
+    }
     const open=target&&list.querySelector('[data-invoice="'+CSS.escape(target)+'"]');
     if(open) { open.classList.add("sg10-highlight");open.scrollIntoView({block:"center"});target=""; }
   }
@@ -536,11 +560,19 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       + '<label>Fecha <input name="day" type="date" value="'+esc(x.fecha)+'"></label>'
       + '<label>Asentador <input name="supplier" value="'+esc(x.proveedor)+'"></label>'
       + '<label>CIF del asentador <input name="tax" value="'+esc(x.cif_proveedor)+'"></label>'
-      + '<label>Importe <input name="total" inputmode="decimal" value="'+esc(x.total)+'"></label></div>'
+      + '<label>Base imponible <input name="base" inputmode="decimal" value="'+esc(x.base)+'"></label>'
+      + '<label>IVA <input name="vat" inputmode="decimal" value="'+esc(x.iva)+'"></label>'
+      + '<label>Total con IVA <input name="total" inputmode="decimal" value="'+esc(x.total)+'"></label></div>'
       + lines.map(line=>'<fieldset><label>Producto <input name="product" value="'+esc(line.producto)+'"></label>'
         + '<div class="grid"><label>Bultos <input name="boxes" inputmode="decimal" value="'+esc(line.cajas)+'"></label>'
         + '<label>Kilos <input name="kg" inputmode="decimal" value="'+esc(line.kilos_netos)+'"></label>'
-        + '<label>Precio <input name="price" inputmode="decimal" value="'+esc(line.precio)+'"></label></div></fieldset>').join("")
+        + '<label>Tara <input name="tara" inputmode="decimal" value="'+esc(line.tara)+'"></label>'
+        + '<label>Precio <input name="price" inputmode="decimal" value="'+esc(line.precio)+'"></label>'
+        + '<label>Unidad de precio <input name="priceUnit" value="'+esc(line.unidad_precio)+'"></label>'
+        + '<label>Importe <input name="net" inputmode="decimal" value="'+esc(line.importe)+'"></label>'
+        + '<label>Tipo de IVA (%) <input name="vatRate" inputmode="decimal" value="'+esc(line.tipo_iva)+'"></label>'
+        + '<label>Importe IVA <input name="vat" inputmode="decimal" value="'+esc(line.iva)+'"></label>'
+        + '<label>Total con IVA <input name="gross" inputmode="decimal" value="'+esc(line.total_con_iva)+'"></label></div></fieldset>').join("")
       + (editable?'<label class="sg10-check"><input type="checkbox" name="visible"'+(x.visible_cliente?" checked":"")+'> Publicar para la empresa al aprobar</label>'
         + '<button name="mode" value="save">Guardar correcciones</button> <button name="mode" value="approve">Aprobar</button>'
         + '<p data-review role="status"></p>':'');
@@ -565,7 +597,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       if(context!==scope()||!roleOwner())return;
       const feedback=form.querySelector("[data-review]");
       const value=(key)=>form.elements[key].value.trim();
-      let total;
+      let total, base, iva;
       const decimal=(input)=>{
         const raw=input.trim();
         if(!raw)return null;
@@ -576,14 +608,18 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       let edited;
       try {
         total=decimal(value("total"));
-        edited=[...form.querySelectorAll("fieldset")].map(field=>{
+        base=decimal(value("base"));
+        iva=decimal(value("vat"));
+        edited=[...form.querySelectorAll("fieldset")].map((field,index)=>{
           const get=(name)=>field.querySelector('[name="'+name+'"]').value;
-          return {producto:get("product").trim(),cajas:decimal(get("boxes")),kilos_netos:decimal(get("kg")),precio:decimal(get("price"))};
+          return {...lines[index],producto:get("product").trim(),cajas:decimal(get("boxes")),tara:decimal(get("tara")),
+            kilos_netos:decimal(get("kg")),precio:decimal(get("price")),unidad_precio:get("priceUnit").trim()||null,
+            importe:decimal(get("net")),tipo_iva:decimal(get("vatRate")),iva:decimal(get("vat")),total_con_iva:decimal(get("gross"))};
         });
       }catch(error){return feedback.textContent=error.message;}
       const company=state().records.clients.find(c=>c.id===value("company"));
       const doc={...x,client_id:company?.id??null,cliente:company?.data.name??x.cliente,
-        proveedor:value("supplier"),cif_proveedor:value("tax"),numero:value("invoice"),fecha:value("day"),total,lineas:edited};
+        proveedor:value("supplier"),cif_proveedor:value("tax"),numero:value("invoice"),fecha:value("day"),base,iva,total,lineas:edited};
       const approve=event.submitter.value==="approve";
       if(approve&&(!company||!invoiceKey(doc)||!edited.length||edited.some(line=>!line.producto)||!number(total)))
         return feedback.textContent="Antes de aprobar verifica empresa, número, fecha, CIF, importe y líneas.";
@@ -883,7 +919,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const day=date();
     const start=new Date(day+"T12:00:00Z");
     if(kind==="week")start.setUTCDate(start.getUTCDate()-(start.getUTCDay()+6)%7);
-    if(kind==="month")start.setUTCDate(1);
+    if(kind==="month"||kind==="year")start.setUTCDate(1);
+    if(kind==="year")start.setUTCMonth(0);
     sgComDate=start.toISOString().slice(0,10);
     window.sgComEnd=day;
     refresh();
@@ -891,7 +928,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
   function commissionView({client,start,end}) {
     commissionKey=JSON.stringify([client,start,end]);
     return '<div class="card"><h2>Revisión de comisiones</h2><div class="sg10-tools"><button onclick="sg10Ops(\'range\',\'day\')">Diario</button>'
-      + '<button onclick="sg10Ops(\'range\',\'week\')">Semanal</button><button onclick="sg10Ops(\'range\',\'month\')">Mensual</button></div>'
+      + '<button onclick="sg10Ops(\'range\',\'week\')">Semanal</button><button onclick="sg10Ops(\'range\',\'month\')">Mensual</button><button onclick="sg10Ops(\'range\',\'year\')">Anual</button></div>'
       + (client ? '<div id="sg10CommissionStatus" role="status">Consultando estado…</div>' : '<p>Selecciona un cliente para revisar su informe.</p>')+'</div>';
   }
   async function commissionStatus() {
@@ -919,7 +956,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         button.disabled=true;
         const row={workspace_id:workspace,client_id:client,date_from:start,date_to:end,fingerprint,status:next,
           published_kg:next==="enviada"?loaded.reduce((total,row)=>total+kilos(row.data),0):null,
-          published_total:next==="enviada"?loaded.reduce((total,row)=>total+commission(row.data),0):null,
+          published_total:next==="enviada"?window.sgCommissionMath.euros(loaded.reduce((total,row)=>total+window.sgCommissionMath.amount(row.data),0n)):null,
           updated_by:state().user.id,updated_at:new Date().toISOString()};
         const result=data
           ? await api.from("sg10_commission_reviews").update(row).eq("workspace_id",workspace).eq("client_id",client)

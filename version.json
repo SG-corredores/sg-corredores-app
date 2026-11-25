@@ -1,6 +1,8 @@
 {
-  "version":"10.0.0-rc.8",
+  "version":"10.0.0-rc.9",
   "news":[
+    "Recuperación de pedidos sin confirmación, selección de fecha y edición desde la tabla.",
+    "Totales de comisiones y relación A4 con exportación para Excel.",
     "Compras en una tabla compacta y acceso rápido a pedidos para mañana.",
     "Zona Clientes con galería continua y tarjetas, subida de fotos desde el móvil y saludo de Aguacatín al abrirlo.",
     "Portada y galería renovadas en la Zona Clientes, con el logotipo y el verde de Serrano Gago.",
