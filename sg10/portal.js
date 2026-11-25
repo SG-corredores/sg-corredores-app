@@ -11,7 +11,7 @@ function showSection(moveFocus = false) {
   element("portal-home").hidden = Boolean(section);
   element("portal-back").hidden = !section;
   if (!moveFocus || element("portal").hidden) return;
-  const heading = (section ?? element("portal-home")).querySelector("h2");
+  const heading = section ? section.querySelector("h2") : element("company-name");
   heading.tabIndex = -1;
   heading.focus({preventScroll:true});
   window.scrollTo(0,0);

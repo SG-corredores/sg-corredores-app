@@ -8,9 +8,9 @@
   <link rel="icon" href="./icon-192.png">
   <link rel="manifest" href="./portal.webmanifest">
   <link rel="stylesheet" href="./sg10/ui.css">
-  <link rel="stylesheet" href="./sg10/portal.css">
+  <link rel="stylesheet" href="./sg10/portal.css?v=galeria-ampliada">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
-  <script type="module" src="./sg10/portal.js?v=whatsapp-directo"></script>
+  <script type="module" src="./sg10/portal.js?v=galeria-ampliada"></script>
 </head>
 <body>
 <header>
@@ -56,9 +56,8 @@
       <label id="spaces-label" hidden>Empresa <select id="spaces"></select></label>
     </div>
     <div id="portal-home">
-      <section id="galeria" aria-labelledby="gallery-heading">
-        <div class="portal-catalog-heading">
-          <h2 id="gallery-heading">Catálogo de productos</h2>
+      <section id="galeria" aria-label="Fotografías de los productos">
+        <div class="portal-gallery-controls">
           <button id="gallery-motion" type="button" aria-pressed="false" hidden>Pausar</button>
         </div>
         <div id="gallery-list" tabindex="0" aria-label="Fotografías de los productos">

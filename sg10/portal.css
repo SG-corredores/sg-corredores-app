@@ -148,16 +148,15 @@ footer { text-align: center; margin: 1.3rem 0; color: var(--muted); font-size: .
 
 
 #galeria { margin: 1rem 0 .95rem; }
-.portal-catalog-heading { display:flex; align-items:center; justify-content:space-between; gap:.65rem; }
-.portal-catalog-heading h2 { margin:.35rem 0 .65rem; font:600 clamp(1.3rem,4vw,1.65rem)/1.18 var(--title); }
-#gallery-motion { color:#24563a; background:#e9f0e6; min-height:38px; font-size:.85rem; }
+.portal-gallery-controls { display:flex; justify-content:flex-end; }
+#gallery-motion { color:#24563a; background:#e9f0e6; min-height:38px; font-size:.85rem; margin-bottom:.45rem; }
 #gallery-list {
   overflow-x:auto; overscroll-behavior-inline:contain; scrollbar-width:thin;
   border-radius:13px; background:#e2eadf;
 }
 #gallery-track, #gallery-track > div { display:flex; width:max-content; }
 #gallery-track > div { gap:.45rem; padding-right:.45rem; }
-#gallery-track article { width:clamp(114px, 32vw, 190px); flex:none; overflow:hidden; border-radius:11px; background:#e7eee4; }
+#gallery-track article { width:clamp(130px, 37vw, 220px); flex:none; overflow:hidden; border-radius:11px; background:#e7eee4; }
 #gallery-track button {
   position:relative; display:block; width:100%; min-height:0; height:100%;
   padding:0; border-radius:0; background:#dfebdf; text-align:left;
