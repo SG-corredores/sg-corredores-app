@@ -1,3 +1,5 @@
+import { bindAvatarGesture, bindAvatarIdle } from "./aguacatin-controls.js";
+
 const greetings = [
   "¡Hola! Soy Aguacatín. Pregúntame por los pedidos y compras de tu empresa.",
   "¡Aguacatín al habla! Hoy no se nos escapa ni un tomate. ¿Qué quieres consultar?",
@@ -16,14 +18,15 @@ export function installAguacatin(preview, ask) {
   const submit = form.querySelector('button[type="submit"]');
   const isOpen = () => !controls.hidden;
 
-  let recognition, speech, press, timer, position;
-  let suppressClick = false;
+  let recognition, speech, position;
+  let speaking = false;
   let revision = 0;
   let greeting = Math.floor(Math.random() * greetings.length);
 
   function stopListening() {
     const active = recognition;
     recognition = null;
+    speaking = false;
     active?.abort();
     widget.classList.remove("is-listening");
     mic.setAttribute("aria-pressed", "false");
@@ -43,6 +46,8 @@ export function installAguacatin(preview, ask) {
     widget.style.right = "auto";
     widget.style.bottom = "auto";
   }
+
+  const activity = bindAvatarIdle(widget,controls,{busy:() => submit.disabled || speaking || window.speechSynthesis?.speaking,close});
 
   function close(restoreFocus = false) {
     revision++;
@@ -87,7 +92,7 @@ export function installAguacatin(preview, ask) {
         const utterance = new SpeechSynthesisUtterance(response);
         speech = utterance;
         utterance.lang = "es-ES";
-        utterance.onend = utterance.onerror = () => { if (speech === utterance) speech = null; };
+        utterance.onend = utterance.onerror = () => { if (speech === utterance) { speech = null; activity(); } };
         window.speechSynthesis.speak(utterance);
       }
     } catch (error) {
@@ -99,6 +104,7 @@ export function installAguacatin(preview, ask) {
       if (current === revision) {
         submit.disabled = false;
         mic.disabled = false;
+        activity();
       }
     }
   }
@@ -123,6 +129,13 @@ export function installAguacatin(preview, ask) {
     const active = new Recognizer();
     recognition = active;
     active.lang = "es-ES";
+    active.onspeechstart = () => { if (recognition === active) speaking = true; };
+    active.onspeechend = () => {
+      if (recognition === active) {
+        speaking = false;
+        activity();
+      }
+    };
     active.onresult = event => {
       if (recognition === active) send(event.results[0][0].transcript.trim().slice(0,500), true);
     };
@@ -134,6 +147,7 @@ export function installAguacatin(preview, ask) {
     };
     active.onend = () => {
       if (recognition === active) {
+        if (speaking) activity();
         recognition = null;
         stopListening();
         answer.textContent = "No he oído ninguna consulta. Puedes volver a intentarlo.";
@@ -152,49 +166,12 @@ export function installAguacatin(preview, ask) {
     }
   });
 
-  avatar.addEventListener("contextmenu", event => event.preventDefault());
-  avatar.addEventListener("pointerdown", event => {
-    if (!event.isPrimary || event.button !== 0) return;
-    suppressClick = false;
-    const bounds = avatar.getBoundingClientRect();
-    const expanded = isOpen();
-    press = {id:event.pointerId,x:event.clientX,y:event.clientY,left:bounds.left,top:bounds.top,dragging:false};
-    avatar.setPointerCapture(event.pointerId);
-    timer = setTimeout(() => {
-      suppressClick = true;
-      if (expanded) close(true);
-      else press.dragging = true;
-    }, expanded ? 2000 : 450);
-  });
-  avatar.addEventListener("pointermove", event => {
-    if (press?.id !== event.pointerId) return;
-    const dx = event.clientX - press.x;
-    const dy = event.clientY - press.y;
-    if (!press.dragging) {
-      if (Math.hypot(dx,dy) > 8) {
-        clearTimeout(timer);
-        suppressClick = true;
-      }
-      return;
-    }
-    position = {x:press.left + dx,y:press.top + dy};
-    place();
-  });
-  function release(event) {
-    if (press?.id !== event.pointerId) return;
-    clearTimeout(timer);
-    if (press.dragging && position) {
-      try { localStorage.setItem(positionKey,JSON.stringify(position)); } catch {}
-    }
-    press = null;
-  }
-  avatar.addEventListener("pointerup",release);
-  avatar.addEventListener("pointercancel",release);
-  avatar.addEventListener("lostpointercapture",release);
-  avatar.addEventListener("click", event => {
-    if (event.detail && suppressClick) return;
-    if (isOpen()) close(true);
-    else open();
+  bindAvatarGesture(avatar,{
+    expanded:isOpen,
+    tap:() => { if (isOpen()) close(true); else open(); },
+    hold:() => close(true),
+    drag:(x,y) => { position = {x,y}; place(); },
+    save:() => { if (position) try { localStorage.setItem(positionKey,JSON.stringify(position)); } catch {} },
   });
   document.addEventListener("keydown",event => {
     if (event.key === "Escape" && !event.defaultPrevented && isOpen()) close(true);

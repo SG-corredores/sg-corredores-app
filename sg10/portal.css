@@ -244,6 +244,7 @@ footer { text-align: center; margin: 1.3rem 0; color: var(--muted); font-size: .
   animation: portal-agu-bob 1.2s ease-in-out infinite alternate;
   cursor: pointer;
 }
+#portal-aguacatin.is-open #portal-agu-avatar.is-held { animation-play-state: paused; }
 #portal-aguacatin.is-listening #portal-agu-avatar { filter: drop-shadow(0 0 12px #20d977); }
 @keyframes portal-agu-bob { to { transform: translateY(-7px) rotate(3deg); } }
 @media (prefers-reduced-motion: reduce) {

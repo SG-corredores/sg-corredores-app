@@ -651,7 +651,7 @@ window.aguSend = async function () {
   finally { busy = false; }
 };
 
-window.sg10PendingOperation = () => Boolean(orderDraft || busy);
+window.sg10AssistantBusy = () => busy;
 window.sg10FormPurchase = (data) => {
   if ($("sg10Tara") && $("sg10Vat") && page === "compras") {
     for (const [id,key,max] of [["sg10Tara","tara",10000],["sg10Vat","vatRate",100]]) {

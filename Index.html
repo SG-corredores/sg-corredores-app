@@ -406,9 +406,9 @@ const n=document.getElementById('nav');n.innerHTML=`<button onclick="sgGo('inici
 </script>
 
 <div id="aguFloat" aria-label="Asistente Aguacatín" style="display:none">
-  <button id="aguAvatar" type="button" onclick="openAgu()" aria-label="Hablar con Aguacatín" aria-describedby="aguCloseHint"><img alt="Aguacatín" src="./sg10/aguacatin.png"></button>
+  <button id="aguAvatar" type="button" aria-label="Hablar con Aguacatín" aria-describedby="aguCloseHint"><img alt="Aguacatín" src="./sg10/aguacatin.png" draggable="false"></button>
   <div id="aguControls" hidden>
-    <span id="aguCloseHint" hidden>Mantén pulsado el personaje dos segundos para cerrar, o pulsa Escape.</span>
+    <span id="aguCloseHint" hidden>Mantén pulsado el personaje para cerrar, o pulsa Escape.</span>
     <div id="aguBubble" role="status" aria-live="polite">¡Aquí estoy! Tócame para hablar.</div>
     <div id="aguWave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <div id="aguEntry"><input id="aguFloatInput" placeholder="Escribe a Aguacatín..." aria-label="Mensaje para Aguacatín" onkeydown="if(event.key==='Enter')aguSend()"><button type="button" onclick="aguSend()" aria-label="Enviar">➤</button><button type="button" onclick="aguListen()" aria-label="Activar micrófono">🎙</button></div>
@@ -455,111 +455,59 @@ window.aguSend=async function(){
 <style id="agu-drag-fix-v2">
 #aguAvatar{touch-action:none!important;-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;cursor:grab!important}
 #aguAvatar img{pointer-events:none!important;-webkit-user-drag:none!important}
-#aguFloat.aguDragging{transition:none!important;z-index:9999!important}
-#aguFloat.aguHolding #aguAvatar{animation-play-state:paused!important}
-#aguFloat.aguDragging #aguAvatar{animation:none!important;cursor:grabbing!important}
+#aguAvatar.is-held{animation-play-state:paused!important}
 </style>
-<script id="agu-drag-fix-v2-js">
-(function(){'use strict';
-const flo=document.getElementById('aguFloat'),av=document.getElementById('aguAvatar');if(!flo||!av)return;
-const key='sg_aguacatin_position_v3';let down=null,holding=false,timer=null,blockClick=false;
-function bound(n,min,max){return Math.min(Math.max(n,min),Math.max(min,max))}
-function locate(x,y){if(flo.classList.contains('aguExpanded'))return;const w=av.offsetWidth||75,h=av.offsetHeight||104;const vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
- flo.style.left=bound(x,8,vw-w-8)+'px';
- flo.style.top=bound(y,8,vh-h-8)+'px';
- flo.style.right='auto';flo.style.bottom='auto';
- flo.style.alignItems='center';}
-function save(){const r=flo.getBoundingClientRect();try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(e){}}
-function release(){clearTimeout(timer);timer=null;down=null;holding=false;flo.classList.remove('aguDragging','aguHolding')}
-try{const v=JSON.parse(localStorage.getItem(key));if(v&&Number.isFinite(v.x)&&Number.isFinite(v.y))requestAnimationFrame(()=>locate(v.x,v.y))}catch(e){}
-const pressDuration=2000;
-function closeOnHold(){
- blockClick=true;
- window.closeAgu();
+<script type="module">
+import { bindAvatarGesture, bindAvatarIdle } from "./sg10/aguacatin-controls.js";
+const floating = document.getElementById("aguFloat");
+const avatar = document.getElementById("aguAvatar");
+const controls = document.getElementById("aguControls");
+const expanded = () => floating.classList.contains("aguExpanded");
+const key = "sg_aguacatin_position_v3";
+
+function locate(x,y) {
+  if (expanded()) return;
+  const bound = (value, limit) => Math.max(8,Math.min(value,limit - 8));
+  floating.style.left = bound(x,document.documentElement.clientWidth - (avatar.offsetWidth || 83)) + "px";
+  floating.style.top = bound(y,document.documentElement.clientHeight - (avatar.offsetHeight || 114)) + "px";
+  floating.style.right = "auto";
+  floating.style.bottom = "auto";
+  floating.style.alignItems = "center";
 }
-av.addEventListener('contextmenu',e=>{
- e.preventDefault();
- if(flo.classList.contains('aguExpanded')&&(e.pointerType==='touch'||e.sourceCapabilities?.firesTouchEvents))closeOnHold();
-});
-function begin(id,x,y,expanded){
- const r=flo.getBoundingClientRect();
- blockClick=false;
- down={id,x,y,left:r.left,top:r.top,expanded,start:performance.now()};
- if(expanded)flo.classList.add('aguHolding');
- timer=setTimeout(()=>{
-  if(!down||flo.classList.contains('aguExpanded')!==expanded)return;
-  blockClick=true;
-  if(expanded){closeOnHold();return;}
-  holding=true;
-  flo.classList.add('aguDragging');
-  navigator.vibrate?.(25);
- },expanded?pressDuration:300);
-}
-function move(x,y){
- const dx=x-down.x,dy=y-down.y;
- if(!holding){if(Math.hypot(dx,dy)>(down.expanded?28:14)){clearTimeout(timer);blockClick=true}return}
- if(!flo.classList.contains('aguExpanded'))locate(down.left+dx,down.top+dy);
-}
-av.addEventListener('pointerdown',e=>{
- const expanded=flo.classList.contains('aguExpanded');
- if(down||e.button!==0||(expanded&&e.pointerType==='touch'))return;
- begin(e.pointerId,e.clientX,e.clientY,expanded);
- try{av.setPointerCapture(e.pointerId)}catch{}
-});
-av.addEventListener('pointermove',e=>{
- if(!down||e.pointerId!==down.id)return;
- if(holding)e.preventDefault();
- move(e.clientX,e.clientY);
-});
-function closeOnRelease(){
- if(down.expanded&&!blockClick&&performance.now()-down.start>=pressDuration-100)closeOnHold();
-}
-function end(e){
- if(!down||e.pointerId!==down.id)return;
- if(e.type==='pointerup')closeOnRelease();
- if(holding)save();
- release();
-}
-av.addEventListener('pointerup',end);
-av.addEventListener('pointercancel',end);
-av.addEventListener('lostpointercapture',end);
-av.addEventListener('touchstart',e=>{
- if(!flo.classList.contains('aguExpanded')||e.touches.length!==1)return;
- e.preventDefault();
- const touch=e.changedTouches[0];
- if(down)return;
- begin('touch-'+touch.identifier,touch.clientX,touch.clientY,true);
-},{passive:false});
-av.addEventListener('touchmove',e=>{
- if(!down)return;
- const touch=Array.from(e.changedTouches).find(t=>down.id==='touch-'+t.identifier);
- if(!touch)return;
- e.preventDefault();
- move(touch.clientX,touch.clientY);
-},{passive:false});
-function endTouch(e){
- if(!down||!Array.from(e.changedTouches).some(t=>down.id==='touch-'+t.identifier))return;
- if(e.type==='touchend')closeOnRelease();
- const tap=e.type==='touchend'&&!blockClick;
- if(e.cancelable)e.preventDefault();
- release();
- if(tap)window.openAgu();
-}
-av.addEventListener('touchend',endTouch,{passive:false});
-av.addEventListener('touchcancel',endTouch);
-window.addEventListener('blur',release);
-av.addEventListener('click',e=>{
- if(blockClick&&e.detail!==0){e.preventDefault();e.stopImmediatePropagation();blockClick=false}
-},{capture:true});
-document.addEventListener('keydown',e=>{
- if(e.key==='Escape'&&flo.classList.contains('aguExpanded')){
+function close(restoreFocus = false) {
   window.closeAgu();
-  av.focus({preventScroll:true});
- }
+  if (restoreFocus) avatar.focus({preventScroll:true});
+}
+bindAvatarGesture(avatar,{
+  expanded,
+  tap:() => window.openAgu(),
+  hold:() => close(true),
+  drag:locate,
+  save:() => {
+    const {left:x,top:y} = floating.getBoundingClientRect();
+    try { localStorage.setItem(key,JSON.stringify({x,y})); } catch {}
+  },
 });
-function clampPosition(){if(!flo.classList.contains('aguExpanded')&&flo.style.left){locate(parseFloat(flo.style.left)||0,parseFloat(flo.style.top)||0)}}
-window.addEventListener('resize',clampPosition);window.visualViewport?.addEventListener('resize',clampPosition);new MutationObserver(clampPosition).observe(flo,{attributes:true,attributeFilter:['class']});
-})();
+window.sgAguIdleActivity = bindAvatarIdle(floating,controls,{
+  busy:() => window.sgConversationBusy?.() || window.sgVoiceBusy?.() || window.sg10AssistantBusy?.(),
+  close,
+});
+new MutationObserver(window.sgAguIdleActivity).observe(document.getElementById("aguBubble"),{
+  childList:true,characterData:true,subtree:true,
+});
+document.addEventListener("keydown",event => {
+  if (event.key === "Escape" && expanded() && !event.defaultPrevented) close(true);
+});
+try {
+  const saved = JSON.parse(localStorage.getItem(key));
+  if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) locate(saved.x,saved.y);
+} catch {}
+function clampPosition() {
+  if (!expanded() && floating.style.left) locate(parseFloat(floating.style.left),parseFloat(floating.style.top));
+}
+window.addEventListener("resize",clampPosition);
+window.visualViewport?.addEventListener("resize",clampPosition);
+new MutationObserver(clampPosition).observe(floating,{attributes:true,attributeFilter:["class"]});
 </script>
 <script>
 (function(){
@@ -901,6 +849,7 @@ let enabled=localStorage.getItem('sg_agu_voice_enabled')!=='false',serial=0,audi
 function refresh(){toggle.textContent=enabled?'🔊 Voz natural activada':'🔇 Voz silenciada';toggle.setAttribute('aria-pressed',String(enabled));}
 function halt(){serial++;clearTimeout(debounce);controller?.abort();controller=null;if(audio){audio.pause();audio.removeAttribute('src');audio=null;}if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=null;}
 window.sgVoiceInterrupt=halt;
+window.sgVoiceBusy=()=>Boolean(controller || audio);
 function clean(s){return String(s||'').replace(/https?:\/\/\S+/g,'enlace').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_#`~]/g,'').replace(/[📦🚛🥑🎙🔊🔇]/gu,'').trim().slice(0,1800)}
 async function say(raw){
  const text=clean(raw);
@@ -920,7 +869,7 @@ async function say(raw){
   if(!response.ok)throw Error('Voz no disponible ('+response.status+')');
   const blob=await response.blob();if(request!==serial)return;
   objectUrl=URL.createObjectURL(blob);audio=new Audio(objectUrl);audio.playbackRate=Number(rate.value)||1;audio.preservesPitch=true;toggle.textContent='🔊 Voz Supabase activa';
-  const finish=()=>{if(request===serial){halt();window.sgConversationResume?.();}};
+  const finish=()=>{if(request===serial){halt();window.sgAguIdleActivity?.();window.sgConversationResume?.();}};
   audio.onended=finish;audio.onerror=finish;
   await audio.play();
  }catch(e){
@@ -1003,16 +952,18 @@ window.askAgu=async function(){const msg=$('aguQuestion')?.value.trim();if(msg&&
 (()=>{
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const bubble=document.getElementById('aguBubble'),floating=document.getElementById('aguFloat');
-let active=false,rec=null,busy=false,timer=null,idleTimer=null,failures=0;
+let active=false,rec=null,busy=false,speaking=false,timer=null,failures=0;
 const close=window.closeAgu;
-function pause(){clearTimeout(timer);clearTimeout(idleTimer);idleTimer=null;if(rec){const r=rec;rec=null;try{r.abort()}catch{}}floating.classList.remove('aguListening');}
-function idle(){idleTimer=null;if(window.sg10PendingOperation?.()){idleTimer=setTimeout(idle,10000);return;}stop();}
+function pause(){clearTimeout(timer);speaking=false;if(rec){const r=rec;rec=null;try{r.abort()}catch{}}floating.classList.remove('aguListening');}
 function stop(){active=false;pause();window.sgCancelPendingOrder?.();}
 function resume(){clearTimeout(timer);if(active&&!rec&&!document.hidden)timer=setTimeout(()=>{if(busy)resume();else listen();},220);}
-function listen(){if(!active||busy||rec||document.hidden)return;if(idleTimer===null)idleTimer=setTimeout(idle,10000);if(!SR){stop();bubble.textContent='Micrófono no compatible con este navegador.';return;}const r=new SR();rec=r;r.lang='es-ES';r.continuous=false;r.interimResults=false;
-r.onspeechstart=()=>{if(rec===r){clearTimeout(idleTimer);idleTimer=null;}};r.onspeechend=()=>{if(rec===r&&active&&idleTimer===null)idleTimer=setTimeout(idle,10000);};r.onresult=async e=>{if(rec!==r||!active)return;const text=e.results[0][0].transcript.trim();failures=0;busy=true;pause();if(/^(adios|hasta luego|deten la conversacion|deja de escuchar)[.! ]*$/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g,''))){busy=false;stop();return;}document.getElementById('aguFloatInput').value=text;try{await window.aguSend()}finally{busy=false;const muted=localStorage.getItem('sg_agu_voice_enabled')==='false';if(muted)resume(); }};
+function listen(){if(!active||busy||rec||document.hidden)return;if(!SR){stop();bubble.textContent='Micrófono no compatible con este navegador.';return;}const r=new SR();rec=r;r.lang='es-ES';r.continuous=false;r.interimResults=false;
+r.onspeechstart=()=>{if(rec===r)speaking=true;};
+r.onspeechend=()=>{if(rec===r){speaking=false;window.sgAguIdleActivity?.();}};
+r.onresult=async e=>{if(rec!==r||!active)return;const text=e.results[0][0].transcript.trim();failures=0;busy=true;pause();if(/^(adios|hasta luego|deten la conversacion|deja de escuchar)[.! ]*$/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g,''))){busy=false;stop();return;}document.getElementById('aguFloatInput').value=text;try{await window.aguSend()}finally{busy=false;const muted=localStorage.getItem('sg_agu_voice_enabled')==='false';if(muted)resume(); }};
 r.onerror=e=>{if(rec!==r)return;if(['not-allowed','service-not-allowed','audio-capture'].includes(e.error)||(++failures>4&&e.error!=='no-speech')){stop();bubble.textContent='No se puede mantener el micrófono activo. Pulsa el micrófono para reintentar.';}};
-r.onend=()=>{if(rec!==r)return;rec=null;floating.classList.remove('aguListening');resume();};try{r.start();floating.classList.add('aguListening')}catch{rec=null;stop();}};
+r.onend=()=>{if(rec!==r)return;if(speaking)window.sgAguIdleActivity?.();speaking=false;rec=null;floating.classList.remove('aguListening');resume();};try{r.start();floating.classList.add('aguListening')}catch{rec=null;stop();}};
+window.sgConversationBusy=()=>busy||speaking;
 window.sgConversationPause=pause;window.sgConversationResume=resume;window.sgConversationStop=stop;
 window.aguListen=()=>{if(active){window.sgVoiceInterrupt?.();pause();resume();return;}active=true;failures=0;listen();};
 window.openAgu=()=>{
@@ -1138,4 +1089,4 @@ settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<d
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
-</script><script type="module" src="./sg10/staff.js?v=sacos"></script></body></html>
+</script><script type="module" src="./sg10/staff.js?v=aguacatin-cierre"></script></body></html>
