@@ -453,7 +453,7 @@ const previousLogout=logout;logout=async function(){try{await disable()}catch(e)
     try{
       const {data,error}=await api.auth.getSession();
       if(error||!data?.session)throw Error('Inicia sesión de nuevo.');
-      const response=await api.functions.invoke('Sg-aguacatin',{
+      const response=await api.functions.invoke('Sg-aguacatin-voz',{
         body:{mensaje,historial:window.sgAguHistory?.get()||[]},headers:{Authorization:'Bearer '+data.session.access_token}
       });
       if(response.error){
@@ -809,8 +809,8 @@ async function run(msg){if(busy)return;busy=true;try{
  if(pending&&/^(si|si guardalo|guarda|guardalo|confirmo|confirmar|adelante|vale|correcto)$/.test(q)){
  const batch=pending;pending=null;let done=0;try{for(const a of batch.ops){if(a.id){const {data,error}=await api.from(TABLES.orders).select('data').eq('workspace_id',workspace).eq('id',a.id).single();if(error||JSON.stringify(data.data)!==a.original)throw Error('El pedido ha cambiado; vuelve a solicitarlo');}await save('orders',a.data,a.id);done++;}render();say(`Guardadas ${done} operaciones correctamente.`);}catch(e){say(`Guardadas ${done} de ${batch.ops.length} operaciones. ${e.message}. Revisa los pedidos antes de repetir.`);}return;}
  const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión');
- const response=await api.functions.invoke('Sg-aguacatin',{body:{mensaje:msg,agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
- if(response.error||!response.data?.ok)throw Error('No he podido interpretar la orden. Comprueba Supabase.');
+ const response=await api.functions.invoke('Sg-aguacatin-voz',{body:{mensaje:msg,agente:true,historial:window.sgAguHistory?.get()||[],borrador:pending?.raw||null},headers:{Authorization:'Bearer '+data.session.access_token}});
+ if(response.error){let detail=null;try{detail=await response.error.context?.json()}catch(_){}throw Error(detail?.error||response.error.message||'Error de conexión con Aguacatín');}if(!response.data?.ok)throw Error(response.data?.error||'Respuesta inválida de Aguacatín');
  const result=response.data;let text=result.respuesta;
  if(Array.isArray(result.acciones)&&result.acciones.length){if(result.acciones.length>20)throw Error('Máximo 20 operaciones por lote');const ops=result.acciones.map(validate);pending={uid:user.id,workspace,expires:Date.now()+120000,ops,raw:result.acciones};text=ops.map(a=>`${a.type}: ${a.data.boxes} ${a.data.quantityUnit==='pales'?'palés':'cajas'} de ${a.data.product} para ${d(records.clients.find(r=>r.id===a.data.clientId)).name}, fecha ${a.data.date}${a.data.price===null?'':', precio '+a.data.price+' euros por '+a.data.priceUnit}`).join('. ')+'. ¿Confirmas?';}else{pending=null;}
  window.sgAguHistory?.add(msg,text);say(text);
