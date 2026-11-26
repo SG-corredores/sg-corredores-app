@@ -1,4 +1,4 @@
-import { esc } from "./common.js?v=10.0.0-rc.25";
+import { esc } from "./common.js?v=10.0.0-rc.26";
 
 const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 const price = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 4 });

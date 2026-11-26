@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.25",
+  "version": "10.0.0-rc.26",
   "news": [
+    "El walkie conecta el canal general al entrar y vuelve a conectarlo si se corta. El primer toque activa la escucha.",
     "La liquidación diaria incluye a todos los clientes, el detalle de pedidos, compras y facturas, y los documentos sin cliente identificado.",
     "Comisiones concilia facturas y abonos de Gmail con las recepciones y separa las liquidaciones pendientes.",
     "La app instalada conserva los archivos de impresión de la misma versión.",

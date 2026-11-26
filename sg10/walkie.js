@@ -6,6 +6,7 @@ const holdMs = 250;
 export function installWalkie({connection,dialog}) {
   let room, privateRoom, widget, speaker, muted=false, audio, speakerTimer;
   let holding=false, tuning=0.8, opening, transmission, roomGeneration=0, switching=false;
+  let scope="", listening=false, retryTimer, retryDelay=3000;
   const playing = new Set();
   const nextAudio = new Map();
   const shortcut=document.createElement("button");
@@ -53,6 +54,13 @@ export function installWalkie({connection,dialog}) {
     if(audio.state!=="running")void audio.resume().catch(()=>{});
     return audio;
   }
+  function unlockAudio(event){
+    if(!event.isTrusted||!listening||audio?.state==="running")return;
+    try{prepareAudio();}catch{}
+  }
+  document.addEventListener("click",unlockAudio,true);
+  document.addEventListener("pointerup",unlockAudio,true);
+  document.addEventListener("keydown",unlockAudio,true);
   function silence(){
     clearTimeout(speakerTimer);
     speaker=null;
@@ -121,13 +129,16 @@ export function installWalkie({connection,dialog}) {
       online,
       invite,
       reconnected(joined){
-        if(joined===(privateRoom||room))state(channelName());
+        if(joined===(privateRoom||room))showChannelState();
       },
       disconnected(joined,status){
         if(joined!==room&&joined!==privateRoom)return;
         stop();silence();
         if(status==="CLOSED"){
-          if(joined===room)room=null;
+          if(joined===room){
+            room=null;
+            retryListening();
+          }
           if(joined===privateRoom){
             privateRoom=null;
             const select=widget?.querySelector("[data-peer]");
@@ -144,6 +155,7 @@ export function installWalkie({connection,dialog}) {
   }
   async function start(){
     if(holding||switching)return;
+    listening=true;
     const attempt={};
     holding=true;
     silence();
@@ -167,7 +179,9 @@ export function installWalkie({connection,dialog}) {
       if(transmission!==attempt)return;
       attempt.room=privateRoom||current;
       if(!attempt.room.ready)throw Error("El canal se está reconectando. Vuelve a pulsar cuando esté listo.");
-      await context.resume();
+      if(context.state!=="running"){
+        throw Error("Toca Escuchar para activar el audio y luego mantén pulsado para hablar.");
+      }
       if(transmission!==attempt)return;
       const flush=await captureWalkie(context,stream,async samples=>{
         try{
@@ -185,6 +199,7 @@ export function installWalkie({connection,dialog}) {
     }catch(error){
       if(transmission===attempt){
         stop();
+        if(!room)retryListening();
         const message=error.name==="NotAllowedError" ? "Permite el micrófono para hablar por el walkie."
           : error.name==="NotFoundError" ? "No se encuentra un micrófono disponible."
           : error.name==="NotReadableError" ? "El micrófono no está disponible. Comprueba si lo está usando otra aplicación."
@@ -235,6 +250,11 @@ export function installWalkie({connection,dialog}) {
   });
   async function close(){
     roomGeneration++;
+    listening=false;
+    clearTimeout(retryTimer);
+    retryTimer=undefined;
+    retryDelay=3000;
+    switching=false;
     stop();
     const channels=[privateRoom,room], context=audio;
     privateRoom=room=opening=null;
@@ -271,14 +291,20 @@ export function installWalkie({connection,dialog}) {
           if(generation!==roomGeneration){await joined.disconnect();return;}
           privateRoom=joined;
           const sent=await room?.send("invite",{to:peer});
+          if(generation!==roomGeneration)return;
           if(sent!=="ok"){
-            await privateRoom.disconnect();privateRoom=null;
+            privateRoom=null;
+            await joined.disconnect();
             throw Error("No se pudo enviar la invitación privada.");
           }
         }
         sound();state(peer?"Canal privado":"Canal general");
-      }catch(error){state(error.message);target.value="";}
-      finally{switching=false;target.disabled=false;ptt.disabled=false;}
+      }catch(error){
+        if(generation===roomGeneration){state(error.message);target.value="";}
+      }
+      finally{
+        if(generation===roomGeneration){switching=false;target.disabled=false;ptt.disabled=false;}
+      }
     };
     const handle=widget.querySelector(".sg10-walkie-drag");
     handle.onpointerdown=(event)=>{
@@ -294,8 +320,28 @@ export function installWalkie({connection,dialog}) {
       handle.onlostpointercapture=()=>{handle.onpointermove=null;};
     };
   }
-  document.addEventListener("visibilitychange",()=>{if(document.hidden){stop();silence();}});
+  document.addEventListener("visibilitychange",()=>{
+    if(document.hidden){stop();silence();}
+    else listenInForeground();
+  });
+  window.addEventListener("online",listenInForeground);
+  window.addEventListener("pageshow",listenInForeground);
   window.addEventListener("pagehide",stop);
+  function showChannelState(){
+    state(audio?.state==="running"?channelName()+" · Mantén pulsado para hablar":"Toca Escuchar para activar el audio.");
+  }
+  function retryListening(){
+    if(!listening||retryTimer!==undefined||document.hidden)return;
+    retryTimer=setTimeout(()=>{
+      retryTimer=undefined;
+      listenInForeground();
+    },retryDelay);
+    retryDelay=Math.min(retryDelay*2,30000);
+  }
+  function listenInForeground(){
+    if(!listening||document.hidden||room)return;
+    void ensureRoom().catch(retryListening);
+  }
   function ensureRoom(){
     if(room?.ready)return Promise.resolve(room);
     if(room)return Promise.reject(Error("El canal se está reconectando. Vuelve a pulsar cuando esté listo."));
@@ -308,7 +354,11 @@ export function installWalkie({connection,dialog}) {
           throw Error("Se cerró el walkie-talkie.");
         }
         room=joined;
-        state("Canal general");online();
+        clearTimeout(retryTimer);
+        retryTimer=undefined;
+        retryDelay=3000;
+        if(!holding)showChannelState();
+        online();
         if(widget)widget.querySelector("[data-ptt]").disabled=false;
         return room;
       })().finally(()=>{if(opening===attempt)opening=null;});
@@ -317,15 +367,26 @@ export function installWalkie({connection,dialog}) {
     return opening;
   }
   async function open(){
+    listening=true;
     if(!widget)makeWidget();
     try{
       prepareAudio();
       await ensureRoom();
       if(widget&&!holding){
         online();
-        state(audio?.state==="running"?channelName()+" · Mantén pulsado para hablar":"Toca Escuchar para activar el audio.");
+        showChannelState();
       }
-    }catch(error){state(error.message);}
+    }catch(error){
+      state(error.message);
+      if(!room)retryListening();
+    }
   }
-  return {close,open,showShortcut(visible){shortcut.hidden=!visible;}};
+  return {close,open,setScope(key){
+    if(key===scope)return;
+    scope=key;
+    const closing=close();
+    shortcut.hidden=!key;
+    listening=Boolean(key);
+    void closing.then(listenInForeground);
+  }};
 }

@@ -1,7 +1,7 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.25";
-import { installWalkie } from "./walkie.js?v=2";
-import { installOperations } from "./operations.js?v=10.0.0-rc.25";
-import { installCommissions } from "./commissions.js?v=10.0.0-rc.25";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.26";
+import { installWalkie } from "./walkie.js?v=10.0.0-rc.26";
+import { installOperations } from "./operations.js?v=10.0.0-rc.26";
+import { installCommissions } from "./commissions.js?v=10.0.0-rc.26";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -249,8 +249,8 @@ function connectScope() {
   liveApi = null;
   history = [];
   orderDraft = null;
-  walkie.showShortcut(Boolean(key));
-  if (!key) { walkie.close(); return; }
+  walkie.setScope(key);
+  if (!key) return;
   inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice,
     onNew: event => {
       if (event.kind === "pedido_cliente" || event.kind === "nuevo_pedido") toast("Pedido nuevo · " + (event.client_name || "Cliente"));
