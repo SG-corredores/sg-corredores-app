@@ -1,6 +1,6 @@
-import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.10";
+import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.11";
 
-export const version = "10.0.0-rc.10";
+export const version = "10.0.0-rc.11";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",
@@ -57,7 +57,7 @@ export async function invoke(api, fn, body) {
 
 export async function subscribePush(api, workspace, user) {
   if (!("PushManager" in window) || !("Notification" in window)) throw Error("Este navegador no ofrece avisos push. En iPhone abre la app desde el icono de inicio.");
-  if (await Notification.requestPermission() !== "granted") throw Error("Activa las notificaciones en los ajustes del dispositivo.");
+  if (Notification.permission !== "granted" && await Notification.requestPermission() !== "granted") throw Error("Activa las notificaciones en los ajustes del dispositivo.");
   await navigator.serviceWorker.register("./sw.js");
   const registration = await navigator.serviceWorker.ready;
   const key = Uint8Array.from(atob(vapidKey.replace(/-/g,"+").replace(/_/g,"/") + "="), b => b.charCodeAt(0));
@@ -94,10 +94,30 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
   let muted = [];
   let active = true;
   let expanded = false;
+  let pushReady = false;
+  const pushPreference = "sg10-push:" + space + ":" + user;
+  function currentPushPreference(value) {
+    try {
+      if (value) localStorage.setItem(pushPreference,value);
+      return localStorage.getItem(pushPreference);
+    } catch { return null; }
+  }
+  async function restorePush() {
+    if (portal || !("Notification" in window) || Notification.permission !== "granted" || currentPushPreference() === "off") return;
+    const registration = await navigator.serviceWorker?.getRegistration();
+    const previous = await registration?.pushManager?.getSubscription();
+    if (!previous && currentPushPreference() !== "on") return;
+    if (!active) return;
+    await subscribePush(api,space,user);
+    if (!active) return;
+    pushReady = true;
+    currentPushPreference("on");
+    draw();
+  }
   function draw() {
     button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
     if (!expanded) return;
-    panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>Activar avisos en este dispositivo</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
+    panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>' + (pushReady ? "Avisos del dispositivo activos" : "Activar avisos en este dispositivo") + '</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
       + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos de pedidos por voz</label>' : '')
       + '<details><summary>Preferencias de avisos push</summary>' + Object.entries(names).map(([kind,label]) =>
         '<label class="sg10-check"><input type="checkbox" data-kind="' + kind + '"' + (muted.includes(kind) ? '' : ' checked') + '> ' + esc(label) + '</label>').join('') + '</details>'
@@ -157,10 +177,16 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
       if (control.hasAttribute("data-mark")) await update({read_through:Math.max(readThrough,eventRows[0]?.id ?? 0)});
       if (control.hasAttribute("data-push")) {
         await subscribePush(api,space,user);
+        currentPushPreference("on");
+        pushReady = true;
+        draw();
         errorMessage(Error("Dispositivo registrado para recibir avisos."));
       }
       if (control.hasAttribute("data-unpush")) {
         await detachPush(api,user);
+        currentPushPreference("off");
+        pushReady = false;
+        draw();
         errorMessage(Error("Avisos push desactivados en este dispositivo."));
       }
       if (control.dataset.id) {
@@ -184,6 +210,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     schema:"public",table:"sg10_events",event:"INSERT",filter:"workspace_id=eq."+space,
   }, () => { refresh().catch(errorMessage); onChange?.(); }).subscribe();
   const timer = setInterval(() => { if (!document.hidden) refresh().catch(errorMessage); }, 30_000);
+  restorePush().catch(errorMessage);
   refresh().then(async () => {
     if (!active) return;
     const id = Number(new URL(location.href).searchParams.get("sg_event"));

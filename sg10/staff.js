@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.10";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.11";
 import { installWalkie } from "./walkie.js?v=supabase";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -193,10 +193,10 @@ async function goToNotice(row) {
     dialog.querySelector("[data-content]").append(text);
     return;
   }
-  if (row.kind === "pedido_cliente" && !get("orders",row.record_id)) await sync(true);
   const targets = { pedidos:"orders", compras:"purchases" };
   if (!["pedidos","compras","facturas","comisiones","galeria"].includes(row.target)) return go("ajustes");
   const collection = targets[row.target];
+  if (collection && (row.kind === "pedido_cliente" || row.kind === "precio") && !get(collection,row.record_id)) await sync(true);
   if (collection && get(collection,row.record_id)) {
     const item = d(get(collection,row.record_id));
     sgNavDate = item.date || today();
@@ -234,6 +234,7 @@ function connectScope() {
   inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice,
     onNew: event => {
       if (event.kind === "pedido_cliente") toast("Pedido nuevo · " + (event.client_name || "Cliente"));
+      if (event.kind === "precio") toast("Precio actualizado · " + [event.client_name,event.article].filter(Boolean).join(" · "));
       if (event.kind === "mensaje_cliente") toast("Mensaje nuevo · " + (event.client_name || "Cliente"));
     },
   });
@@ -384,8 +385,11 @@ function decoratePurchaseSheet() {
     if (button.dataset.focus==="pSupplier") bindSplitHold(button,orderId);
     button.onclick=()=>{
       if (button.dataset.sg10Held==="1") { button.dataset.sg10Held="0"; return; }
-      if (existing) { edit("purchases",purchaseLine); focusPurchase(button.dataset.focus); }
-      else window.sg10OpenPurchaseForm(purchaseLine,button.dataset.focus==="pProduct"?"pSupplier":button.dataset.focus,button.dataset.focus==="pProduct");
+      if (button.dataset.focus === "pPrice" || button.dataset.focus === "pSupplier") {
+        const field = button.dataset.focus === "pPrice" ? "price" : "supplier";
+        window.sg10EditPriceOrSupplier(get(existing?"purchases":"orders",purchaseLine),field,existing);
+      } else if (existing) { edit("purchases",purchaseLine); focusPurchase("pProduct"); }
+      else window.sg10OpenPurchaseForm(purchaseLine,"pSupplier",true);
     };
   }
 }
@@ -396,6 +400,7 @@ function decoratePurchaseForm() {
   const card=picker.closest(".card");
   card.querySelector("h2").textContent=original?"Editar compra":"Nueva compra";
   operations.decoratePurchase();
+  sg10FocusSupplierAfterPrice($("pPrice"),$("pSupplier"));
   picker.addEventListener("change",()=>{
     if (!original) fillPurchaseOrder(get("orders",picker.value));
   });

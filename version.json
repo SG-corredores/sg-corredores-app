@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.10",
+  "version": "10.0.0-rc.11",
   "news": [
+    "Los cambios de precio muestran un aviso y, al guardarlos, se abre el campo de puesto si está vacío.",
     "Un aviso por pedido de Zona Clientes y avisos para consultas e incidencias enviadas desde el portal.",
     "Recepción por cliente con confirmación de cada línea y navegación al deslizar.",
     "Asignaciones por empleado, listas abreviadas, impresión A4 e interpretación de pedidos con PIN autorizado.",
