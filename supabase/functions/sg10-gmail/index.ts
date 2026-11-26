@@ -108,7 +108,7 @@ Deno.serve(async request => {
     const lookback="newer_than:30d {filename:pdf subject:reclamación subject:incidencia subject:faltante subject:abono}";
     const query=new URLSearchParams({q:lookback,maxResults:"3"});
     if (cursor.data?.page_token) query.set("pageToken",cursor.data.page_token);
-    const newest=new URLSearchParams({q:lookback.replace("newer_than:30d","newer_than:2d"),maxResults:"100"});
+    const newest=new URLSearchParams({q:lookback.replace("newer_than:30d","newer_than:2d"),maxResults:"500"});
     const [page, head]=messageIds ? [{messages:messageIds.map((id:string)=>({id}))},null] : await Promise.all([
       gmail("/messages?"+query).catch(error=>{
         if (!query.has("pageToken") || !(error instanceof Error) || error.message!=="Gmail HTTP 400") throw error;
@@ -120,15 +120,23 @@ Deno.serve(async request => {
     const pageIds: string[]=(page.messages??[]).map((row:{id:string})=>row.id);
     const headIds: string[]=(head?.messages??[]).map((row:{id:string})=>row.id);
     const ids=[...new Set([...headIds,...pageIds])];
-    const known=ids.length ? await api.from("sg10_gmail_messages").select("message_id").eq("workspace_id",workspace).in("message_id",ids) : {data:[],error:null};
-    if (known.error) throw known.error;
-    const processed=new Set((known.data??[]).map(row=>row.message_id));
+    // Keep each PostgREST filter short while scanning past already-read mail.
+    function chunks(values:string[]) {
+      return Array.from({length:Math.ceil(values.length/100)},(_,index)=>values.slice(index*100,(index+1)*100));
+    }
+    const known=await Promise.all(chunks(ids).map(part=>api.from("sg10_gmail_messages").select("message_id")
+      .eq("workspace_id",workspace).in("message_id",part)));
+    const knownError=known.find(result=>result.error)?.error;
+    if (knownError) throw knownError;
+    const processed=new Set(known.flatMap(result=>(result.data??[]).map(row=>row.message_id)));
     const pendingIds=pageIds.filter(id=>!processed.has(id));
     const recent=headIds.filter(id=>!processed.has(id));
-    const recentCandidates=recent.length ? await api.from("sg10_gmail_pending").select("message_id").eq("workspace_id",workspace)
-      .eq("reason","retry").gte("updated_at",new Date(Date.now()-10*60_000).toISOString()).in("message_id",recent) : {data:[],error:null};
-    if (recentCandidates.error) throw recentCandidates.error;
-    const coolingDown=new Set((recentCandidates.data??[]).map(row=>row.message_id));
+    const retryAfter=new Date(Date.now()-10*60_000).toISOString();
+    const retries=await Promise.all(chunks(recent).map(part=>api.from("sg10_gmail_pending").select("message_id").eq("workspace_id",workspace)
+      .eq("reason","retry").gte("updated_at",retryAfter).in("message_id",part)));
+    const retryError=retries.find(result=>result.error)?.error;
+    if (retryError) throw retryError;
+    const coolingDown=new Set(retries.flatMap(result=>(result.data??[]).map(row=>row.message_id)));
     const priority=recent.filter(id=>!coolingDown.has(id));
     // Fill slots with current mail before advancing the historical cursor.
     const batch=[...new Set([...priority,...pendingIds])].filter(id=>!coolingDown.has(id)).slice(0,3);
