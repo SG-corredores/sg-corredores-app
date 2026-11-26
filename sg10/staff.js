@@ -1,6 +1,6 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.12";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.13";
 import { installWalkie } from "./walkie.js?v=supabase";
-import { installOperations } from "./operations.js?v=whatsapp-directo";
+import { installOperations } from "./operations.js?v=10.0.0-rc.13";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -118,9 +118,21 @@ function decorateDaily() {
   const instruction = [...sheet.children].find(node => node.classList.contains("muted") && node.textContent.includes("Desliza"));
   if (instruction) instruction.hidden = true;
 
+  for (const row of sheet.querySelectorAll("[data-order-id]")) {
+    addSplitButton(row.dataset.orderId, row.querySelector('[data-field="product"]')?.parentElement);
+  }
   for (const cell of sheet.querySelectorAll('[data-order-id] [data-field="supplier"]')) {
     bindSplitHold(cell,cell.closest("[data-order-id]").dataset.orderId);
   }
+}
+function addSplitButton(orderId, container) {
+  if (!container || operations.splitPalletsRemaining(orderId) < 1) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary sg10-split-shortcut";
+  button.textContent = "Repartir palets";
+  button.onclick = () => window.sg10Ops("splitPurchase",orderId);
+  container.append(button);
 }
 function bindSplitHold(cell,orderId) {
   if (d(get("orders",orderId)).quantityUnit !== "pales") return;
@@ -184,6 +196,8 @@ const operations = installOperations({
   date: () => sgClientDate(),
   formatPallets,
 });
+
+window.sg10PalletsRemainingToSplit = operations.splitPalletsRemaining;
 
 const walkie=installWalkie({connection:()=>({api,workspace,user}),dialog:operations.dialog});
 
@@ -388,6 +402,7 @@ function decoratePurchaseSheet() {
     const existing=kind==="purchase";
     const orderId=existing?d(get("purchases",purchaseLine)).orderId:purchaseLine;
     if (button.dataset.focus==="pSupplier") bindSplitHold(button,orderId);
+    if (!existing && button.dataset.focus==="pProduct") addSplitButton(orderId,button.parentElement);
     button.onclick=()=>{
       if (button.dataset.sg10Held==="1") { button.dataset.sg10Held="0"; return; }
       if (button.dataset.focus === "pPrice" || button.dataset.focus === "pSupplier") {

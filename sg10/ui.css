@@ -193,3 +193,12 @@
 @media (max-width:390px) {
   #app>#nav button { font-size: 12px; }
 }
+
+#dailySheet .sg10-split-shortcut,#purchaseSheet .sg10-split-shortcut {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  margin-top: 3px;
+  padding: 3px 4px;
+  font-size: .8rem;
+}

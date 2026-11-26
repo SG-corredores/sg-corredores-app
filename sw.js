@@ -1,4 +1,4 @@
-const CACHE = "sg10-shell-10.0.0-rc.12";
+const CACHE = "sg10-shell-10.0.0-rc.13";
 const base = self.registration.scope;
 const url = (path) => new URL(path,base).href;
 const shell = [

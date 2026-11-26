@@ -730,6 +730,8 @@ const rows=()=>records.orders.filter(r=>d(r).date===date()&&!['Cancelado','Anula
 const buys=r=>records.purchases.filter(p=>d(p).orderId===r.id&&!['Anulado','Cancelado'].includes(d(p).status));
 function needsPriceOrSupplier(order){
   const linked=buys(order);
+  if(d(order).quantityUnit==='pales' && linked.some(row=>Number(d(row).sgBoughtPallets)>0)
+      && window.sg10PalletsRemainingToSplit?.(order.id)>0) return true;
   const lines=linked.length?linked:[order];
   return lines.some(row=>{
     const line=d(row),amount=line.priceCents??line.price;
@@ -1246,4 +1248,4 @@ settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<d
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
-</script><script type="module" src="./sg10/staff.js?v=10.0.0-rc.12"></script></body></html>
+</script><script type="module" src="./sg10/staff.js?v=10.0.0-rc.13"></script></body></html>

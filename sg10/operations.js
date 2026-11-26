@@ -768,21 +768,27 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     if(rows.length!==1 || /\bcotelo\b/.test(normalized(client)))return null;
     return (rows[0].data.sg10Rules??[]).find(item=>canonicalProduct(item.product)===canonicalProduct(product))?.rate??null;
   }
+  function splitPalletsRemaining(orderId) {
+    const {records}=state();
+    const order=records.orders.find(row=>row.id===orderId);
+    if(!order||order.data.quantityUnit!=="pales"||["Cancelado","Anulado"].includes(order.data.status))return 0;
+    const used=records.purchases.filter(row=>row.data.orderId===orderId&&!["Anulado","Cancelado"].includes(row.data.status))
+      .reduce((total,row)=>total+(Number(row.data.sgBoughtPallets)||0),0);
+    return Math.max(0,(Number(order.data.boxes)||0)-used);
+  }
   function splitPurchase(orderId) {
     const {records,api,workspace}=state();
     const order=records.orders.find(row=>row.id===orderId);
     if(!order||order.data.quantityUnit!=="pales"||["Cancelado","Anulado"].includes(order.data.status))
       return toast("Selecciona un pedido activo en palés.");
-    const used=records.purchases.filter(row=>row.data.orderId===orderId&&!["Anulado","Cancelado"].includes(row.data.status))
-      .reduce((total,row)=>total+(Number(row.data.sgBoughtPallets)||0),0);
-    const pending=Math.max(0,Number(order.data.boxes)-used);
+    const pending=splitPalletsRemaining(orderId);
     if(pending<=0)return toast("Este pedido ya tiene todos sus palés asignados.");
     const dialog=openDialog("Repartir entre puestos");
     const root=dialog.querySelector("[data-content]");
     const context=scope();
     root.innerHTML='<p><b>'+esc([order.data.product,order.data.variety].filter(Boolean).join(" "))+'</b> · Pendientes: '
-      +esc(formatPallets(pending))+' palés</p><form><div data-lines></div><button type="button" data-add>Añadir puesto</button> '
-      +'<button>Guardar este reparto</button><p role="status"></p></form>';
+      +esc(formatPallets(pending))+' palés</p><form><div data-lines></div><div class="sg10-tools"><button type="button" data-add>Añadir puesto</button>'
+      +'<button type="submit" class="primary">Guardar reparto</button></div><p role="status" aria-live="polite"></p></form>';
     const form=root.querySelector("form");
     const lines=form.querySelector("[data-lines]");
     const feedback=form.querySelector("[role=status]");
@@ -792,11 +798,12 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       if(lines.children.length>=12)return;
       const row=document.createElement("fieldset");
       row.innerHTML='<legend>Puesto</legend><label>Nombre <input name="supplier" required maxlength="160"></label>'
-        +'<div class="grid"><label>Palés <input name="amount" required placeholder="Ej. 1, ½, 2½"></label>'
-        +'<label>Bultos reales <input name="boxes" inputmode="decimal"></label><label>Kilos netos <input name="kg" inputmode="decimal"></label>'
+        +'<div class="grid"><label>Palés <input name="amount" inputmode="decimal" required placeholder="1, ½, 2½"></label>'
         +'<label>Precio <input name="price" inputmode="decimal"></label><label>Unidad del precio <select name="unit"><option value="kg">€/kg</option>'
         +'<option value="caja">€/caja</option><option value="pale">€/palé</option></select></label></div>'
-        +'<button type="button" data-half>½ palé</button> <button type="button" data-remove>Quitar puesto</button>';
+        +'<details><summary>Bultos y peso</summary><div class="grid"><label>Bultos reales <input name="boxes" inputmode="decimal"></label>'
+        +'<label>Kilos netos <input name="kg" inputmode="decimal"></label></div></details>'
+        +'<div class="sg10-tools"><button type="button" data-half>½ palé</button><button type="button" data-remove>Quitar puesto</button></div>';
       row.querySelector("[data-half]").onclick=()=>{
         row.querySelector('[name="amount"]').value="½";request=crypto.randomUUID();
       };
@@ -942,5 +949,5 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
   }
   const actions={editPhoto:photoForm,removePhoto,camera:cameraForm,loadInvoices,importInvoices,reviewInvoice,clients:clientForm,previewClients,rules:ruleForm,range,splitPurchase};
   window.sg10Ops=(action,...args)=>Promise.resolve().then(()=>actions[action]?.(...args)).catch(error=>toast(error.message));
-  return {dialog:openDialog,previewClients,settingsView,invoiceView,galleryView,commissionView,configureRate,decoratePurchase,afterRender,setTarget};
+  return {dialog:openDialog,splitPalletsRemaining,previewClients,settingsView,invoiceView,galleryView,commissionView,configureRate,decoratePurchase,afterRender,setTarget};
 }
