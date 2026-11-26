@@ -1,13 +1,21 @@
-const CACHE = "sg10-shell-10.0.0-rc.22";
+const VERSION = "10.0.0-rc.23";
+const CACHE = "sg10-shell-" + VERSION;
 const base = self.registration.scope;
 const url = (path) => new URL(path,base).href;
 const shell = [
   "Index.html","index.html","version.json","sg10/purchase-work.js","portal.html","portal.webmanifest","manifest.webmanifest","sg10/common.js","sg10/staff.js","sg10/operations.js","sg10/walkie.js","sg10/walkie-realtime.js","sg10/walkie-audio.js","sg10/walkie-worklet.js","sg10/portal.js","sg10/portal-carousel.js","sg10/portal-aguacatin.js","sg10/aguacatin-controls.js","sg10/order-voice.js",
   "sg10/ui.css","sg10/portal.css","sg10/logotipo.png","sg10/portada-clientes.webp","sg10/aguacatin.png","sg10/palet-madera.jpg","icon-192.png","icon-512.png",
 ];
+const versioned = new Set(["sg10/ui.css", "sg10/purchase-work.js", "sg10/staff.js"].map(path => new URL(path,base).pathname));
 const allowed = new Set(shell.map(path => new URL(path,base).pathname));
+
+function releaseUrl(path) {
+  const asset = new URL(path,base);
+  if (versioned.has(asset.pathname)) asset.searchParams.set("v",VERSION);
+  return asset.href;
+}
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(shell.map(path => new Request(url(path),{cache:"reload"})))).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(shell.map(path => new Request(releaseUrl(path),{cache:"reload"})))).then(() => self.skipWaiting()));
 });
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SG_SKIP_WAITING") event.waitUntil(self.skipWaiting());
@@ -39,7 +47,10 @@ self.addEventListener("fetch", (event) => {
       if (response.ok) return response;
     } catch {}
     const cache = await caches.open(CACHE);
-    return await cache.match(target.origin + target.pathname) ?? Response.error();
+    const asset = versioned.has(target.pathname) && target.searchParams.has("v")
+      ? target.href
+      : releaseUrl(target.pathname);
+    return await cache.match(asset) ?? Response.error();
   })());
 });
 self.addEventListener("push", (event) => {

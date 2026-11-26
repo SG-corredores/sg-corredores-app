@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.22",
+  "version": "10.0.0-rc.23",
   "news": [
+    "La app instalada conserva los archivos de impresión de la misma versión.",
     "Al imprimir todos los clientes, cada cliente empieza en una hoja nueva y los pedidos se imprimen con letra más grande.",
     "Resumen incluye acceso directo a los pedidos sin asignar para elegir comprador.",
     "Cada comprador tiene su lista y el administrador puede marcar otros nombres o ver las líneas sin asignar.",
