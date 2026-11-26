@@ -41,13 +41,13 @@
   let workspaceScope = "";
   let members = new Map();
   let buyers = new Map();
+  let buyerByAccount = new Map();
   let assignments = new Map();
   let selected = new Set();
   let loaded = false;
   let loading;
   let assignmentBusy = false;
-  let currentMode = "general";
-  let employee = "";
+  let buyerChecks = null;
   let productFilter = "";
   let grouped = true;
   let live;
@@ -60,7 +60,15 @@
     const uid = assignments.get(id)?.assignee;
     return members.has(uid) || buyers.has(uid) ? uid : null;
   }
-  const person = uid => buyers.get(uid)?.name || members.get(uid)?.name || "Sin asignar";
+  const buyerKey = uid => buyerByAccount.get(uid) || uid || "";
+  const ownBuyer = () => buyerKey(user?.id);
+  const person = uid => buyers.get(buyerKey(uid))?.name || members.get(uid)?.name || "Sin asignar";
+  function workVisible(orderId) {
+    if (!loaded) return false;
+    const key = buyerKey(currentAssignee(orderId));
+    if (role !== "owner" || !buyerChecks) return key === ownBuyer();
+    return buyerChecks.has(key);
+  }
   function colour(uid) {
     const index = [...new Set([...members.keys(),...buyers.keys()])].sort().indexOf(uid);
     const hue = Math.round((index * 137.508 + 225) % 360);
@@ -91,7 +99,8 @@
   function refreshView() {
     if (page === "micompra") {
       if (!$("content").contains(document.activeElement) || !document.activeElement.matches("input:not([type=checkbox]),select,textarea")) draw();
-    } else if (page === "hoja" || page === "resumenpedidos") decorateOrders();
+    } else if (page === "resumenpedidos") render();
+    else if (page === "hoja") decorateOrders();
   }
 
   function load() {
@@ -103,17 +112,18 @@
       allRows(connection, "sg_members", "user_id,role", "user_id", space),
       allRows(connection, "sg10_staff_names", "user_id,display_name", "user_id", space),
       allRows(connection, "sg10_purchase_assignments", "order_id,assignee,revision", "order_id", space),
-      allRows(connection, "sg10_buyers", "id,display_name", "id", space),
+      allRows(connection, "sg10_buyers", "id,display_name,employee_id", "id", space),
     ]).then(([staff, names, assigned, directory]) => {
       if (scope() !== account) return;
       const displayNames = new Map(names.map(row => [row.user_id, row.display_name]));
       members = new Map(staff.map((row) => [row.user_id, {
         id: row.user_id,
-        name: displayNames.get(row.user_id) || (row.role === "owner" ? "Administrador" : "Empleado " + row.user_id.slice(0, 6)),
+        name: displayNames.get(row.user_id) || (row.user_id === user.id && String(user.user_metadata?.full_name || user.user_metadata?.username || "").trim()) || (row.role === "owner" ? "Administrador" : "Empleado " + row.user_id.slice(0, 6)),
       }]));
-      buyers = new Map(directory.map(row => [row.id,{id:row.id,name:row.display_name}]));
+      buyers = new Map(directory.map(row => [row.id,{id:row.id,name:row.display_name,employeeId:row.employee_id}]));
+      buyerByAccount = new Map(directory.filter(row => row.employee_id).map(row => [row.employee_id,row.id]));
+      if (buyerChecks) buyerChecks = new Set([...buyerChecks].map(buyerKey));
       assignments = new Map(assigned.map(row => [row.order_id, row]));
-      if (!members.has(employee) && !buyers.has(employee)) employee = user.id;
       loaded = true;
       teamError = "";
     }).catch(error => {
@@ -138,16 +148,16 @@
     workspaceScope = account;
     members.clear();
     buyers.clear();
+    buyerByAccount.clear();
+    buyerChecks = null;
     assignments.clear();
     selected.clear();
     opened.clear();
     productFilter = "";
-    currentMode = "general";
     grouped = true;
     loaded = false;
     teamError = "";
     if (!account) return;
-    employee = user.id;
     liveApi = api;
     live = api.channel("sg-purchase-work-" + crypto.randomUUID());
     for (const table of ["sg10_purchase_assignments", "sg10_staff_names", "sg10_buyers"]) {
@@ -260,7 +270,9 @@
   const ordersOn = (day, client = "") => records.orders.filter(row => orderDate(row) === day
     && (!client || d(row).clientId === client) && !cancelled.has(d(row).status));
   function listRows(day, assignee = "", filter = "") {
-    return ordersOn(day).filter(row => remaining(row) > 0 && (!assignee || currentAssignee(row.id) === assignee) && matchesProduct(row, filter))
+    return ordersOn(day).filter(row => remaining(row) > 0 && matchesProduct(row, filter)
+      && (assignee ? buyerKey(currentAssignee(row.id)) === buyerKey(assignee) && (role === "owner" || workVisible(row.id))
+        : workVisible(row.id)))
       .sort((a, b) => productName(a).localeCompare(productName(b), "es") || clientName(a).localeCompare(clientName(b), "es"));
   }
   function groupsFor(rows) {
@@ -274,11 +286,9 @@
   }
   const groupTotal = rows => Math.round(rows.reduce((total, row) => total + remaining(row), 0) * 1000) / 1000;
   const groupMemberIds = rows => [...new Set(rows.map(row => currentAssignee(row.id)))];
-  const selectedEmployee = () => currentMode === "individual" ? employee || user?.id : "";
-  function show(mode, day, filter = "", uid = user?.id) {
-    currentMode = mode;
+  function show(day, filter = "", onlyMine = false) {
     productFilter = filter;
-    employee = uid;
+    if (onlyMine && role === "owner") buyerChecks = new Set([ownBuyer()]);
     if (day) sgNavDate = day;
     go("micompra");
   }
@@ -323,31 +333,38 @@
     dialog.className = "sg-work-team";
     dialog.innerHTML = '<h2>Gestionar compradores</h2><form><label>Comprador<select name="buyer"></select></label>'
       + '<label>Nombre<input name="name" required maxlength="60"></label>'
+      + '<label>Cuenta del empleado<select name="accountLink"></select></label>'
       + '<div class="actions"><button type="submit" class="primary">Guardar comprador</button>'
       + '<button type="button" data-close>Cerrar</button></div><p role="status"></p></form>';
     const form = dialog.querySelector("form");
-    const {buyer,name} = form.elements;
+    const {buyer,name,accountLink} = form.elements;
     const status = form.querySelector("[role=status]");
     function options(value = "") {
       buyer.innerHTML = '<option value="">Añadir comprador</option>' + memberOptions(value,buyersSorted());
       buyer.value = value;
-      name.value = buyers.get(value)?.name || "";
+      const entry = buyers.get(value);
+      name.value = entry?.name || "";
+      const candidates = membersSorted().filter(member =>
+        !buyerByAccount.has(member.id) || buyerByAccount.get(member.id) === value);
+      accountLink.innerHTML = '<option value="">Sin cuenta vinculada</option>' + memberOptions(entry?.employeeId,candidates);
+      accountLink.value = entry?.employeeId || "";
     }
     options();
-    buyer.onchange = () => { name.value = buyers.get(buyer.value)?.name || ""; };
+    buyer.onchange = () => options(buyer.value);
     form.querySelector("[data-close]").onclick = () => dialog.close();
     dialog.onclose = () => dialog.remove();
     form.onsubmit = async event => {
       event.preventDefault();
       if (scope() !== account || role !== "owner" || user?.is_anonymous) return dialog.close();
       const displayName = name.value.trim(), id = buyer.value;
+      const payload = {display_name:displayName,employee_id:accountLink.value || null};
       if (!displayName) return;
       event.submitter.disabled = true;
       try {
         const table = api.from("sg10_buyers");
         const response = id
-          ? await table.update({ display_name: displayName }).eq("workspace_id",workspace).eq("id",id).select("id").single()
-          : await table.insert({ workspace_id: workspace, display_name: displayName }).select("id").single();
+          ? await table.update(payload).eq("workspace_id",workspace).eq("id",id).select("id").single()
+          : await table.insert({workspace_id:workspace,...payload}).select("id").single();
         if (response.error) throw response.error;
         if (loading?.account === account) await loading.promise;
         await load();
@@ -355,7 +372,7 @@
         options(response.data.id);
         status.textContent = "Comprador guardado.";
       } catch (error) {
-        status.textContent = error.code === "23505" ? "Ya existe un comprador con ese nombre." : err(error);
+        status.textContent = error.code === "23505" ? "El nombre o la cuenta ya están vinculados a otro comprador." : err(error);
       } finally { event.submitter.disabled = false; }
     };
     document.body.append(dialog);
@@ -399,40 +416,69 @@
     dialog.showModal();
   }
 
+  function buyerFilter() {
+    const panel = document.createElement("fieldset");
+    panel.className = "sg-work-buyer-filter";
+    const legend = '<legend>Ver pedidos de</legend>';
+    if (!loaded) {
+      panel.innerHTML = legend + '<p role="status">' + esc(teamError || "Cargando compradores…") + '</p>';
+      if (teamError) {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Reintentar";
+        retry.onclick = load;
+        panel.append(retry);
+      }
+      return panel;
+    }
+    const self = ownBuyer();
+    const own = {id:self,name:person(self)+" (yo)"};
+    const others = [...buyersSorted(),...membersSorted().filter(row => !buyerByAccount.has(row.id))]
+      .filter(row => row.id !== self).sort(byName);
+    const owner = role === "owner";
+    const entries = owner ? [own,...others,{id:"",name:"Sin asignar"}] : [own];
+    panel.innerHTML = legend + entries.map(({id,name}) =>
+      '<label><input type="checkbox" data-buyer-view value="' + esc(id) + '"'
+      + ((buyerChecks ? buyerChecks.has(id) : id === self) || !owner ? " checked" : "")
+      + (owner ? "" : " disabled") + '>' + esc(name) + '</label>').join("");
+    if (owner) panel.onchange = ({target}) => {
+      if (!target.matches("[data-buyer-view]")) return;
+      buyerChecks ??= new Set([self]);
+      if (target.checked) buyerChecks.add(target.value);
+      else buyerChecks.delete(target.value);
+      render();
+      $('content').querySelector('[data-buyer-view][value="'+CSS.escape(target.value)+'"]')?.focus({preventScroll:true});
+    };
+    return panel;
+  }
+
   function draw() {
     const content = $("content");
     const day = sgClientDate();
-    const rows = listRows(day, selectedEmployee(), productFilter);
+    const rows = listRows(day, "", productFilter);
     const line = row => '<div class="sg-work-line pending"><label class="sg-work-select">' + check(row)
       + "<span><b>" + esc(clientName(row)) + "</b> · " + esc(productName(row)) + " · " + esc(amountLabel(row, remaining(row))) + "</span></label>"
       + badge(currentAssignee(row.id)) + (canEdit(row.id) && loaded ? '<button type="button" data-confirm-buy="' + esc(row.id)
         + '">Comprar</button>' : "") + "</div>";
     content.innerHTML = '<section class="card sg-work-list"><h2>Listas de compra</h2><div class="actions sg-work-toolbar">'
       + '<label>Fecha<input type="date" id="sgWorkDate" value="' + esc(day) + '"></label>'
-      + '<label>Vista<select id="sgWorkMode"><option value="general">Lista general</option>'
-      + '<option value="individual"' + (currentMode === "individual" ? " selected" : "") + '>Lista individual</option></select></label>'
-      + (currentMode === "individual" ? '<label>Empleado<select id="sgWorkEmployee">' + memberOptions(employee) + '</select></label>' : "")
       + '<label>Producto<input id="sgWorkFilter" type="search" value="' + esc(productFilter) + '"></label>'
       + '</div><div class="actions"><button type="button" id="sgWorkGroup">' + (grouped ? "Ver por cliente y línea" : "Agrupar productos")
       + '</button><button type="button" id="sgWorkPrint">Imprimir / PDF</button>'
       + (role === "owner" && loaded ? '<button type="button" id="sgWorkNames">Nombres de empleados</button>' : "")
-      + ((!loaded && teamError) ? '<button type="button" id="sgWorkReload">Reintentar sincronización</button>' : "") + "</div>"
-      + (!loaded ? '<p role="status">' + esc(teamError || "Sincronizando empleados y asignaciones…") + "</p>" : "")
-      + ((loaded || currentMode === "general") && rows.length ? (grouped ? [...groupsFor(rows)].map(([groupKey, lines]) =>
+      + "</div>"
+      + (rows.length ? (grouped ? [...groupsFor(rows)].map(([groupKey, lines]) =>
         '<details class="sg-work-group pending" data-group="' + esc(groupKey) + '"' + (opened.has(groupKey) ? " open" : "") + "><summary>"
         + esc(productName(lines[0])) + " · " + esc(amountLabel(lines[0], groupTotal(lines))) + ' <span class="sg-work-badges">'
         + groupMemberIds(lines).map(badge).join("") + "</span></summary>" + lines.map(line).join("") + "</details>").join("") : rows.map(line).join(""))
         : loaded ? "<p>No hay mercancía pendiente para esta selección.</p>" : "") + "</section>";
     const panel = content.firstElementChild;
     $("sgWorkDate").onchange = event => { if (event.target.value) { sgNavDate = event.target.value; draw(); } };
-    $("sgWorkMode").onchange = event => { currentMode = event.target.value; draw(); };
-    if ($("sgWorkEmployee")) $("sgWorkEmployee").onchange = event => { employee = event.target.value; draw(); };
     $("sgWorkFilter").onchange = event => { productFilter = event.target.value; draw(); };
     $("sgWorkFilter").onkeydown = event => { if (event.key === "Enter") { event.preventDefault(); event.target.blur(); } };
     $("sgWorkGroup").onclick = () => { grouped = !grouped; draw(); };
-    $("sgWorkPrint").onclick = () => printList(day, selectedEmployee(), productFilter, grouped);
+    $("sgWorkPrint").onclick = () => printList(day, "", productFilter, grouped);
     if ($("sgWorkNames")) $("sgWorkNames").onclick = () => configureNames();
-    if ($("sgWorkReload")) $("sgWorkReload").onclick = load;
     for (const details of panel.querySelectorAll("details")) details.ontoggle = () => {
       if (!details.isConnected) return;
       details.open ? opened.add(details.dataset.group) : opened.delete(details.dataset.group);
@@ -441,7 +487,7 @@
     const header = document.createElement("div");
     panel.querySelector(".sg-work-toolbar").after(header);
     actions(panel, () => rows.filter(row => canEdit(row.id)).map(row => row.id));
-    header.append(panel.querySelector(".sg-work-actions"));
+    header.append(buyerFilter(),panel.querySelector(".sg-work-actions"));
   }
 
   function decorateSummaryAssignments(sheet, table, heading) {
@@ -476,7 +522,11 @@
     const heading = table?.querySelector("thead tr");
     if (!heading) return;
     const summary = page === "resumenpedidos";
-    if (summary) decorateSummaryAssignments(sheet, table, heading);
+    if (summary) {
+      sheet.querySelector(".sg-work-buyer-filter")?.remove();
+      table.before(buyerFilter());
+      decorateSummaryAssignments(sheet, table, heading);
+    }
     if (!sheet.querySelector("[data-print-orders]")) {
       const section = document.createElement("div");
       section.className = "actions";
@@ -643,7 +693,7 @@
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
     const groups = new Map();
     for (const row of ordersOn(day, client)) {
-      if (summary && !window.sg10OrderNeedsPriceOrSupplier(row)) continue;
+      if (summary && (!workVisible(row.id) || !window.sg10OrderNeedsPriceOrSupplier(row))) continue;
       const company = clientName(row);
       if (!groups.has(company)) groups.set(company, []);
       groups.get(company).push(printLine(row, Number(d(row).boxes) || 0));
@@ -779,7 +829,7 @@
     if (/\b(?:me queda|me falta|pendiente)\b.*\bcomprar\b|\b(?:mi lista de compra|mis compras pendientes)\b/.test(query)) {
       if (!loaded) { answer("Espera a que se sincronice la lista de empleados."); return true; }
       const lines = [...groupsFor(listRows(day, user.id)).values()];
-      show("individual", day);
+      show(day, "", true);
       answer(lines.length ? "Te queda " + lines.slice(0, 8).map(group => amountLabel(group[0], groupTotal(group)) + " de " + productName(group[0])).join(", ")
         + (lines.length > 8 ? ". El resto está en tu lista." : ".") : "No tienes mercancía pendiente asignada para ese día.");
       return true;
@@ -789,7 +839,7 @@
       const filter = groupCommand[1].replace(/\s+(?:(?:de|para)\s+)?(?:hoy|ayer|manana|pasado manana|20\d{2} \d{2} \d{2})$/, "");
       grouped = true;
       const lines = listRows(day, "", filter);
-      show("general", day, filter);
+      show(day, filter);
       answer(lines.length ? "He agrupado " + lines.length + " líneas pendientes de " + filter + " en la lista general." : "No encuentro mercancía pendiente de " + filter + " para ese día.");
       return true;
     }
@@ -808,6 +858,7 @@
     return false;
   }
 
+  window.sg10WorkVisible = workVisible;
   window.sg10Reception = reception;
   window.sg10CreateEmployeePin = createEmployeePin;
   window.sg10PendingQuantity = remaining;

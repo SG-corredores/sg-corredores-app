@@ -226,3 +226,9 @@
 #sgReception[data-loads] .done .sg-load-cell { background: #e4f5e8; }
 #sgReception[data-loads] [data-receipt] { min-width: 44px; min-height: 44px; white-space: nowrap; }
 #sgReception[data-loads] th:last-child { font-size: .78rem; }
+
+.sg-work-buyer-filter{display:flex;flex-wrap:wrap;gap:.35rem .5rem;margin:.55rem 0;padding:.45rem .55rem;border:1px solid #bfd5c5;border-radius:9px}
+.sg-work-buyer-filter legend{padding:0 .25rem;color:#20583a;font-weight:700}
+.sg-work-buyer-filter label{display:inline-flex;align-items:center;gap:.35rem;margin:0;padding:.25rem .3rem;overflow-wrap:anywhere}
+.sg-work-buyer-filter input[type="checkbox"]{width:1.15rem;height:1.15rem;margin:0;flex:none;accent-color:#17643b}
+.sg-work-buyer-filter p{margin:.2rem 0}
