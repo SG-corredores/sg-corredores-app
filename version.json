@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.15",
+  "version": "10.0.0-rc.16",
   "news": [
+    "Walkie-talkie con activación de audio al tocar y confirmación de envío de voz.",
     "Cargas muestra producto, cantidad y puesto, con confirmación de recepción por compra.",
     "La columna de comprador aparece solo en Resumen de pedidos.",
     "Repartir palets por puestos y precios desde el mismo pedido.",

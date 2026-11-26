@@ -1,5 +1,7 @@
 import { captureWalkie, playWalkie } from "./walkie-audio.js";
-import { openWalkieChannel } from "./walkie-realtime.js";
+import { openWalkieChannel } from "./walkie-realtime.js?v=2";
+
+const holdMs = 250;
 
 export function installWalkie({connection,dialog}) {
   let room, privateRoom, widget, speaker, muted=false, audio, speakerTimer;
@@ -36,6 +38,21 @@ export function installWalkie({connection,dialog}) {
     tone.start();tone.stop(audio.currentTime+.1);
   }
   function channelName(){return privateRoom?"Canal privado":"Canal general";}
+  function prepareAudio(){
+    const Context=window.AudioContext||window.webkitAudioContext;
+    if(!Context)throw Error("Este navegador no permite reproducir el audio del walkie.");
+    if(!audio){
+      const context=new Context();
+      audio=context;
+      context.addEventListener("statechange",()=>{
+        if(audio===context&&context.state==="running"&&room?.ready&&!holding)
+          state(channelName()+" · Mantén pulsado para hablar");
+      });
+    }
+    // On touchscreens, the browser may wait until the first tap is released.
+    if(audio.state!=="running")void audio.resume().catch(()=>{});
+    return audio;
+  }
   function silence(){
     clearTimeout(speakerTimer);
     speaker=null;
@@ -88,7 +105,7 @@ export function installWalkie({connection,dialog}) {
       button.disabled=true;
       const generation=roomGeneration;
       try{
-        await audio?.resume();
+        prepareAudio();
         const joined=await connect(sender);
         if(generation!==roomGeneration||privateRoom){await joined.disconnect();return;}
         stop();silence();privateRoom=joined;box.close();state(channelName());
@@ -103,11 +120,27 @@ export function installWalkie({connection,dialog}) {
       audio:receive,
       online,
       invite,
-      disconnected(joined){
+      reconnected(joined){
+        if(joined===(privateRoom||room))state(channelName());
+      },
+      disconnected(joined,status){
         if(joined!==room&&joined!==privateRoom)return;
-        stop();silence();state("Se perdió la conexión del walkie.");
+        stop();silence();
+        if(status==="CLOSED"){
+          if(joined===room)room=null;
+          if(joined===privateRoom){
+            privateRoom=null;
+            const select=widget?.querySelector("[data-peer]");
+            if(select)select.value="";
+          }
+        }
+        report("Se perdió la conexión del walkie.");
       },
     });
+  }
+  function report(message){
+    state(message);
+    showFeedback(message,5000);
   }
   async function start(){
     if(holding||switching)return;
@@ -115,31 +148,48 @@ export function installWalkie({connection,dialog}) {
     holding=true;
     silence();
     transmission=attempt;
-    showFeedback(room ? "Abriendo micrófono…" : "Conectando al walkie…");
+    showFeedback(room?.ready ? "Abriendo micrófono…" : "Conectando al walkie…");
     try{
-      const current=await ensureRoom();
+      const context=prepareAudio();
+      if(!context.audioWorklet||!navigator.mediaDevices?.getUserMedia)
+        throw Error("Abre SG Corredores en Chrome o Safari y permite el micrófono.");
+      const microphone=(async()=>{
+        await new Promise(resolve=>setTimeout(resolve,holdMs));
+        if(transmission!==attempt)return null;
+        const stream=await navigator.mediaDevices.getUserMedia({
+          audio:{echoCancellation:true,noiseSuppression:true},video:false,
+        });
+        if(transmission===attempt)attempt.stream=stream;
+        else stream.getTracks().forEach(track=>track.stop());
+        return stream;
+      })();
+      const [current,stream]=await Promise.all([ensureRoom(),microphone]);
       if(transmission!==attempt)return;
       attempt.room=privateRoom||current;
-      if(!navigator.mediaDevices?.getUserMedia)throw Error("Este navegador no permite usar el micrófono.");
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
-      if(transmission!==attempt){
-        stream.getTracks().forEach(track=>track.stop());
-        return;
-      }
-      attempt.stream=stream;
-      if(!audio?.audioWorklet)throw Error("Abre SG Corredores en Chrome o Safari para usar la voz.");
-      await audio.resume();
-      attempt.flush=await captureWalkie(audio,stream,samples=>attempt.room.send("audio",{samples}));
+      if(!attempt.room.ready)throw Error("El canal se está reconectando. Vuelve a pulsar cuando esté listo.");
+      await context.resume();
       if(transmission!==attempt)return;
+      const flush=await captureWalkie(context,stream,async samples=>{
+        try{
+          if(await attempt.room.send("audio",{samples})==="ok")return;
+        }catch{}
+        if(transmission===attempt){
+          stop();
+          report("No se ha enviado el audio. Comprueba la conexión y vuelve a intentarlo.");
+        }
+      });
+      if(transmission!==attempt){flush?.();return;}
+      attempt.flush=flush;
       shortcut.setAttribute("aria-pressed","true");
       beep();state("Estás hablando");showFeedback("Estás hablando");
     }catch(error){
       if(transmission===attempt){
         stop();
         const message=error.name==="NotAllowedError" ? "Permite el micrófono para hablar por el walkie."
+          : error.name==="NotFoundError" ? "No se encuentra un micrófono disponible."
+          : error.name==="NotReadableError" ? "El micrófono no está disponible. Comprueba si lo está usando otra aplicación."
           : error.message||"No se pudo abrir el micrófono.";
-        state(message);
-        showFeedback(message,5000);
+        report(message);
       }
     }
   }
@@ -174,6 +224,15 @@ export function installWalkie({connection,dialog}) {
     button.addEventListener("contextmenu",event=>event.preventDefault());
   }
   bindPushToTalk(shortcut);
+  let pressedAt;
+  shortcut.addEventListener("pointerdown",event=>{
+    if(event.isPrimary&&event.button===0)pressedAt=performance.now();
+  });
+  shortcut.addEventListener("click",()=>{
+    const tap=pressedAt===undefined||performance.now()-pressedAt<holdMs;
+    pressedAt=undefined;
+    if(tap||audio?.state!=="running")void open();
+  });
   async function close(){
     roomGeneration++;
     stop();
@@ -187,14 +246,14 @@ export function installWalkie({connection,dialog}) {
     widget.className="sg10-walkie";
     widget.innerHTML='<div class="sg10-walkie-drag">Walkie-talkie</div><p data-live role="status">Conectando…</p>'
       +'<select data-peer aria-label="Canal"><option value="">Canal general</option></select><div class="sg10-tools">'
-      +'<button data-ptt type="button" disabled>Mantén para hablar</button><button data-mute type="button">Silenciar</button>'
+      +'<button data-ptt type="button">Mantén para hablar</button><button data-mute type="button">Silenciar</button>'
       +'<button data-listen type="button">Escuchar</button><button data-close type="button">Salir</button>'
       +'</div><label>Volumen <input type="range" min="0" max="1" step=".05" value=".8"></label>';
     document.body.append(widget);
     const ptt=widget.querySelector("[data-ptt]");
     bindPushToTalk(ptt);
     widget.querySelector("[data-mute]").onclick=({currentTarget:button})=>{muted=!muted;button.textContent=muted?"Quitar silencio":"Silenciar";sound();};
-    widget.querySelector("[data-listen]").onclick=()=>{void audio?.resume();sound();};
+    widget.querySelector("[data-listen]").onclick=()=>{void open();};
     widget.querySelector("[data-close]").onclick=close;
     widget.querySelector("input").oninput=({target})=>{tuning=Number(target.value);sound();};
     widget.querySelector("[data-peer]").onchange=async({target})=>{
@@ -238,12 +297,11 @@ export function installWalkie({connection,dialog}) {
   document.addEventListener("visibilitychange",()=>{if(document.hidden){stop();silence();}});
   window.addEventListener("pagehide",stop);
   function ensureRoom(){
-    if(room)return Promise.resolve(room);
+    if(room?.ready)return Promise.resolve(room);
+    if(room)return Promise.reject(Error("El canal se está reconectando. Vuelve a pulsar cuando esté listo."));
     if(!opening){
       const generation=roomGeneration;
       const attempt=(async()=>{
-        const Context=window.AudioContext||window.webkitAudioContext;
-        if(Context&&!audio){audio=new Context();await audio.resume().catch(()=>{});}
         const joined=await connect();
         if(generation!==roomGeneration){
           await joined.disconnect();
@@ -258,15 +316,16 @@ export function installWalkie({connection,dialog}) {
     }
     return opening;
   }
-  return {
-    close,
-    showShortcut(visible){shortcut.hidden=!visible;},
-    async open(){
-      if(!widget)makeWidget();
-      try{
-        await ensureRoom();
-        if(widget){widget.querySelector("[data-ptt]").disabled=false;online();}
-      }catch(error){state(error.message);}
-    },
-  };
+  async function open(){
+    if(!widget)makeWidget();
+    try{
+      prepareAudio();
+      await ensureRoom();
+      if(widget&&!holding){
+        online();
+        state(audio?.state==="running"?channelName()+" · Mantén pulsado para hablar":"Toca Escuchar para activar el audio.");
+      }
+    }catch(error){state(error.message);}
+  }
+  return {close,open,showShortcut(visible){shortcut.hidden=!visible;}};
 }
