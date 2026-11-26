@@ -1,6 +1,6 @@
 import { createOrderVoice } from "./order-voice.js";
 
-export const version = "10.0.0-rc.8";
+export const version = "10.0.0-rc.9";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",
@@ -33,7 +33,7 @@ export function matchCompany(text, companies) {
   return ranked[0]?.score !== ranked[1]?.score ? ranked[0]?.id : undefined;
 }
 
-export const orderUnits = {cajas:["caja","cajas"], pales:["palet","palets"], sacos:["saco","sacos"]};
+export const orderUnits = {cajas:["caja","cajas"], pales:["palet","palets"], sacos:["saco","sacos"], kg:["kg","kg"]};
 export function orderUnitLabel(unit, amount) {
   return (Object.hasOwn(orderUnits,unit) ? orderUnits[unit] : orderUnits.cajas)[Number(amount) === 1 ? 0 : 1];
 }
@@ -42,7 +42,7 @@ export function isOrderRequest(text) {
   const query = normalized(text).replace(/^[¡¿\s]*/, "").replace(/^(?:oye )?aguacatin[,:\s]+/, "").replace(/^por favor[,:\s]+/, "");
   if (/^(?:quiero saber|quisiera saber|me puedes decir|dime|consulta|consultar|busca|mira|que|cuant[oa]s?|quien(?:es)?|hay|tiene[n]?|llevan?|se ha[n]?)\b/.test(query)) return false;
   if (/^(?:crea|prepara|anota|anotame|anotale|apunta|apuntame|apuntale|anade|agrega|registra|registrame|haz(?:me)?|pon(?:le|me)?|pide|nuevo pedido|interpreta|necesito|quiero|quisiera|querria|pedimos|pedir|te pido|pedirte|me pones|por favor)\b/.test(query)) return true;
-  return /^(?:\d+(?:[.,]\d+)?|medio|media|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:cajas?|pales?|palets?|pallets?|sacos?)\b/.test(query);
+  return /^(?:\d+(?:[.,]\d+)?|medio|media|un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:cajas?|pales?|palets?|pallets?|sacos?|kg|kilos?)\b/.test(query);
 }
 
 export async function invoke(api, fn, body) {

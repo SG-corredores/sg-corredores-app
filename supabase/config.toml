@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.sg10-walkie]
 verify_jwt = false
+
+[functions.sg-interpretar]
+verify_jwt = true
+
+[functions.sg10-employee-pin]
+verify_jwt = false

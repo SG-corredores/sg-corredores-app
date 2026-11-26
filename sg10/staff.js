@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=palets";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.9";
 import { installWalkie } from "./walkie.js?v=supabase";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -33,7 +33,7 @@ function openMore() {
   const dialog = operations.dialog("Más");
   const menu = document.createElement("div");
   menu.className = "sg10-more-menu";
-  const sections = [["Clientes","clientes"],["Comisiones","comisiones"],["Facturas","facturas"],["Mi compra","micompra"],
+  const sections = [["Clientes","clientes"],["Comisiones","comisiones"],["Facturas","facturas"],["Listas de compra","micompra"],
     ["Buscar producto","consultar"],["Fotos de productos","galeria"],["Walkie-talkie","walkie"],["Zona Clientes","portal"],["Ajustes","ajustes"]];
   for (const [label,target] of sections) {
     if (target === "portal" && (role !== "owner" || user?.is_anonymous)) continue;
@@ -60,7 +60,7 @@ function updateNav() {
     if (button.dataset.route === current) button.setAttribute("aria-current","page");
     else button.removeAttribute("aria-current");
   }
-  $("sgBackBar")?.classList.toggle("sg10-back",Boolean(editing) || !["inicio","hoja","pedidos","compras","cargas"].includes(page));
+  $("sgBackBar")?.classList.toggle("sg10-back",Boolean(editing) || page !== "inicio");
 }
 
 function orderToolbar(element) {
@@ -75,8 +75,8 @@ function orderToolbar(element) {
   };
   bar.querySelector("[data-new]").onclick = () => {
     keepDailySelection();
-    go("pedidos");
-    requestAnimationFrame(()=>$("oProduct")?.focus());
+    window.sg10OpenNewOrder?.();
+    requestAnimationFrame(()=>$("dailyProduct")?.focus());
   };
   bar.querySelector("[data-import]").onclick = () => { keepDailySelection();window.sgImportOpen(); };
   bar.querySelector("[data-print]").onclick = () => { keepDailySelection();window.sgPrint82(); };
@@ -232,7 +232,7 @@ function connectScope() {
         await sync(true);
         const active = document.activeElement;
         if (!editing && !document.querySelector("dialog[open], #dailyDialog:not([hidden])") &&
-            !active?.matches("input,select,textarea") && ["inicio","pedidos","hoja","compras","cargas","consultar"].includes(page) &&
+            !active?.matches("input:not([type=checkbox]),select,textarea") && ["inicio","pedidos","hoja","compras","cargas","consultar","micompra","recepcion"].includes(page) &&
             !hasDraft()) render();
       },380);
     });
@@ -246,7 +246,7 @@ function hasDraft() {
 }
 setInterval(connectScope,700);
 document.addEventListener("visibilitychange",() => {
-  if (!document.hidden && currentScope()) sync(true);
+  if (!document.hidden && currentScope()) sync();
 });
 
 const activeLine = row => !["Cancelado","Anulado"].includes(row.data.status);
@@ -254,6 +254,7 @@ const donePurchase = data => ["Comprado","Cargado","Preparado","Completado","Ent
 let newPurchase = false;
 const purchaseForm = purchases;
 function remainingOrder(order) {
+  if (window.sg10PendingQuantity) return window.sg10PendingQuantity(order);
   const data = order.data;
   const key = data.quantityUnit === "pales" ? "sgBoughtPallets" : "boxes";
   const reserved = records.purchases.filter(row=>activeLine(row)&&row.data.orderId===order.id)
@@ -300,7 +301,7 @@ purchases = () => {
 
 function fillPurchaseOrder(order) {
   const countLabel = document.querySelector('label[for="pBoxes"]');
-  countLabel.textContent = order?.data.quantityUnit === "sacos" ? "Sacos" : "Cajas";
+  countLabel.textContent = order?.data.quantityUnit === "sacos" ? "Sacos" : order?.data.quantityUnit === "kg" ? "Kilos comprados" : "Cajas";
   if (!order) return;
   const data = order.data;
   $("pClient").value=data.clientId;
@@ -308,6 +309,9 @@ function fillPurchaseOrder(order) {
   $("pOrder").value=order.id;
   $("pProduct").value=data.product;
   $("pVariety").value=data.variety||"";
+  $("pSupplier").value=data.supplier||"";
+  $("pPrice").value=priceInput(data);
+  $("pPriceUnit").value=data.priceUnit||"kg";
   $("pBoxes").value=data.quantityUnit==="pales"?0:remainingOrder(order);
   const pallets=$("sg10PurchasePallets");
   if (pallets) pallets.value=data.quantityUnit==="pales"?formatPallets(remainingOrder(order)):"";
@@ -319,7 +323,9 @@ function focusPurchase(field) {
   if (details) details.open=true;
   input.focus();
 }
-window.sg10OpenPurchaseForm = (orderId,field) => {
+let purchaseReturn;
+window.sg10OpenPurchaseForm = (orderId,field,confirmPurchase = false) => {
+  purchaseReturn = page === "micompra" ? { day: sgClientDate(), client: sgNavClient } : null;
   const order=get("orders",orderId);
   if (order) {
     sgNavDate=order.data.date;
@@ -331,13 +337,31 @@ window.sg10OpenPurchaseForm = (orderId,field) => {
   sgRefreshOrderChoices();
   fillPurchaseOrder(order);
   $("pOrder").dispatchEvent(new Event("change"));
+  if (confirmPurchase && order) $("pStatus").value = "Comprado";
   focusPurchase(field || (order ? "pSupplier" : "pProduct"));
+};
+window.sg10AfterPurchase = () => {
+  if (!purchaseReturn) return false;
+  const original = purchaseReturn;
+  purchaseReturn = null;
+  sgNavDate = original.day;
+  sgNavClient = original.client;
+  window.sg10Back?.();
+  if (page !== "micompra") go("micompra");
+  return true;
 };
 
 function decoratePurchaseSheet() {
   const sheet=$("purchaseSheet");
   if (!sheet) return;
-  sheet.querySelector("[data-new-purchase]").onclick=()=>window.sg10OpenPurchaseForm();
+  const newButton = sheet.querySelector("[data-new-purchase]");
+  newButton.onclick=()=>window.sg10OpenPurchaseForm();
+  const lists = document.createElement("button");
+  lists.type = "button";
+  lists.className = "secondary";
+  lists.textContent = "Listas de compra";
+  lists.onclick = () => go("micompra");
+  newButton.after(lists);
   for (const button of sheet.querySelectorAll("[data-focus]")) {
     const {kind,purchaseLine}=button.closest("tr").dataset;
     const existing=kind==="purchase";
@@ -346,7 +370,7 @@ function decoratePurchaseSheet() {
     button.onclick=()=>{
       if (button.dataset.sg10Held==="1") { button.dataset.sg10Held="0"; return; }
       if (existing) { edit("purchases",purchaseLine); focusPurchase(button.dataset.focus); }
-      else window.sg10OpenPurchaseForm(purchaseLine,button.dataset.focus==="pProduct"?"pSupplier":button.dataset.focus);
+      else window.sg10OpenPurchaseForm(purchaseLine,button.dataset.focus==="pProduct"?"pSupplier":button.dataset.focus,button.dataset.focus==="pProduct");
     };
   }
 }
@@ -374,7 +398,7 @@ function decoratePurchaseForm() {
   card.querySelector(".actions").before(extra);
   const exit=document.createElement("button");
   exit.type="button";exit.className="secondary";exit.textContent="Volver a compras";
-  exit.onclick=()=>go("compras");
+  exit.onclick=()=>{ if (!window.sg10AfterPurchase()) go("compras"); };
   const actions=card.querySelector(".actions");
   actions.querySelector('button[onclick="cancel()"]')?.remove();
   actions.append(exit);
@@ -437,7 +461,7 @@ function loadSheet() {
   }
   for (const row of purchases) {
     const x = d(row);
-    if (Number(x.boxes) > 0) add(x,Number(x.boxes),x.quantityUnit === "sacos" ? "sacos" : "cajas");
+    if (Number(x.boxes) > 0) add(x,Number(x.boxes),x.quantityUnit === "pales" ? "cajas" : x.quantityUnit || "cajas");
     else if (x.quantityUnit === "pales" && Number(x.sgBoughtPallets) > 0) add(x,Number(x.sgBoughtPallets),"pales");
   }
   for (const row of orders) {
@@ -561,6 +585,7 @@ const originalSection = sgGo;
 sgGo = function (target) { newPurchase = false; return originalSection(target); };
 go = function (target) {
   newPurchase = false;
+  purchaseReturn = null;
   if (target === "galeria" || target === "facturas" || target === "cargas" || target === "pales") {
     page = target;
     editing = null;
@@ -576,7 +601,7 @@ function answer(text, voice = true) {
   $("aguBubble").textContent = text;
   if (voice && typeof window.aguSay === "function") window.aguSay(text);
 }
-function assistantDraft(rows, selectedClient, date) {
+function assistantDraft(rows, selectedClient, date, sourceMessage) {
   const dialog = operations.dialog("Revisar pedido de Aguacatín");
   const form = document.createElement("form");
   form.innerHTML = '<label>Cliente <select name="client" required><option value="">Seleccionar</option>' + options(selectedClient)
@@ -585,12 +610,21 @@ function assistantDraft(rows, selectedClient, date) {
       + html(row.product) + '"></label><label>Variedad (opcional) <input name="variety" maxlength="120" value="' + html(row.variety)
       + '"></label><label>Cantidad <input name="quantity" required inputmode="decimal" value="' + html(row.quantity)
       + '"></label><label>Unidad <select name="unit" required>'
-      + sgUnitOptions(row.unit) + '</select></label></fieldset>').join("")
+      + sgUnitOptions(row.unit) + '</select></label><label>Precio <input name="price" inputmode="decimal" value="' + html(row.price ?? "")
+      + '"></label><label>Unidad del precio <select name="priceUnit">' + [["kg","€/kg"],["caja","€/caja"],["pale","€/palet"]].map(([unit,label]) => '<option value="' + unit + '"'
+        + (row.priceUnit === unit ? " selected" : "") + ">" + label + "</option>").join("")
+      + '</select></label><label>Puesto <input name="supplier" maxlength="160" value="' + html(row.supplier || "") + '"></label>'
+      + (row.doubt ? "<p>" + html(row.doubt) + "</p>" : "") + "</fieldset>").join("")
     + '<button type="submit">Confirmar y guardar</button><p role="status"></p>';
   dialog.querySelector("[data-content]").append(form);
   const context = currentScope();
   let requestId = crypto.randomUUID();
-  form.oninput = () => { requestId = crypto.randomUUID(); };
+  form.oninput = event => {
+    requestId = crypto.randomUUID();
+    const unit = event.target.closest("fieldset")?.querySelector('[name="unit"]');
+    if (event.target.name === "unit") event.target.dataset.manual = "1";
+    if (event.target.name === "quantity" && unit) sgUnitAuto(event.target,unit);
+  };
   orderDraft = {dialog, form};
   dialog.onclose = () => { orderDraft = null; dialog.remove(); };
   form.onsubmit = async (event) => {
@@ -598,20 +632,30 @@ function assistantDraft(rows, selectedClient, date) {
     if (context !== currentScope()) return dialog.close();
     const clientId = form.elements.client.value;
     const date = form.elements.date.value;
-    const lines = [...form.querySelectorAll("fieldset")].map(row => ({
-      clientId,date,product:row.querySelector('[name="product"]').value.trim(),variety:row.querySelector('[name="variety"]').value.trim(),
-      boxes:validNumber(row.querySelector('[name="quantity"]').value),quantityUnit:row.querySelector('[name="unit"]').value,status:"Pendiente",
-    }));
+    const lines = [...form.querySelectorAll("fieldset")].map(row => {
+      const field = name => row.querySelector('[name="' + name + '"]').value.trim();
+      const quantityUnit = field("unit");
+      return {
+        clientId, date, product: field("product"), variety: field("variety"), quantityUnit,
+        boxes: quantityUnit === "pales" ? readPallets(field("quantity")) : validNumber(field("quantity")),
+        price: field("price") ? (/^\d+(?:[.,]\d{1,2})?$/.test(field("price")) ? validNumber(field("price")) : NaN) : null,
+        priceUnit: field("priceUnit"), supplier: field("supplier"), sourceMessage, status: "Pendiente",
+      };
+    });
     const output = form.querySelector("[role=status]");
-    if (lines.some(row => !row.product || !Number.isFinite(row.boxes) || row.boxes <= 0)) return output.textContent = "Revisa los artículos.";
-    if (new Set(lines.map(row => [normalized(row.product), normalized(row.variety),row.boxes,row.quantityUnit].join("|"))).size !== lines.length)
+    if (lines.some(row => !row.product || !Number.isFinite(row.boxes) || row.boxes <= 0 || Number.isNaN(row.price))) return output.textContent = "Revisa los artículos.";
+    if (new Set(lines.map(row => [normalized(row.product), normalized(row.variety),row.boxes,row.quantityUnit,row.price,row.priceUnit,normalized(row.supplier)].join("|"))).size !== lines.length)
       return output.textContent = "Hay artículos repetidos. Revísalos.";
     event.submitter.disabled = true;
     try {
       const { error } = await api.rpc("sg10_staff_order", {space:workspace,request:requestId,lines});
       if (error) throw error;
       await sync(true);
+      if (context !== currentScope()) return dialog.close();
+      sgNavDate = date;
+      sgNavClient = clientId;
       dialog.close();
+      go("hoja");
       answer(lines.length === 1 ? "Pedido guardado en Supabase." : lines.length + " artículos guardados en Supabase.");
       toast("Pedido guardado.");
     } catch (error) { output.textContent = error.message; }
@@ -619,30 +663,45 @@ function assistantDraft(rows, selectedClient, date) {
   };
 }
 
+let assignmentCommandBusy = false;
 const legacySend = window.aguSend;
 window.aguSend = async function () {
   const input = $("aguFloatInput");
   const text = input?.value.trim();
   if (!text || !workspace || !user) return legacySend?.();
   const query = normalized(text);
-  if (/^(imprime|imprimir|saca en papel|modifica|cambia|confirma|anula|elimina|carga)\b/.test(query)) return legacySend?.();
-  if (busy) return;
+  if (busy || assignmentCommandBusy) return;
+  assignmentCommandBusy = true;
+  try {
+    if (await window.sg10WorkVoice?.(text, answer)) {
+      input.value = "";
+      return;
+    }
+  } finally { assignmentCommandBusy = false; }
+  if (/^(modifica|cambia|confirma|anula|elimina|carga)\b/.test(query)) return legacySend?.();
   busy = true;
   input.value = "";
   const account = currentScope();
   const mode = isOrderRequest(text) ? "pedido" : "consulta";
-  const date = text.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? sgClientDate();
+  const date = window.sg10WorkDate?.(text,mode === "pedido" ? sgClientDate() : today()) || today();
   $("aguBubble").textContent = mode === "pedido" ? "Preparando el borrador…" : "Consultando los datos…";
   try {
-    const result = await invoke(api,"sg10-aguacatin",{
-      workspace,mode,text,date,history,deep:/\b(analiza|compara|incoherencia|discrepancia|explica|a fondo|detallado|resumen complejo)\b/.test(query),
-    });
+    const result = mode === "pedido"
+      ? await invoke(api,"sg-interpretar",{workspace,texto:text})
+      : await invoke(api,"sg10-aguacatin",{
+        workspace,mode,text,date,history,deep:/\b(analiza|compara|incoherencia|discrepancia|explica|a fondo|detallado|resumen complejo)\b/.test(query),
+      });
     if (account !== currentScope() || $("aguControls").hidden) return;
-    if (mode === "pedido" && Array.isArray(result.articulos) && result.articulos.length) {
+    if (mode === "pedido") {
+      if (result.truncado) throw Error("Puedes confirmar hasta 30 artículos por pedido. Dicta el pedido en dos partes.");
+      if (!result.lineas?.length) throw Error("No he encontrado artículos. Indica el producto y su cantidad.");
       const company = matchCompany(text,records.clients.map(row => ({id:row.id,name:d(row).name})));
-      if (result.articulos.length > 30) throw Error("Puedes confirmar hasta 30 artículos por pedido. Dicta el pedido en dos partes.");
-      assistantDraft(result.articulos,company,/^20\d{2}-\d{2}-\d{2}$/.test(result.fecha) ? result.fecha : date);
-      answer("He preparado " + result.articulos.length + (result.articulos.length === 1 ? " artículo." : " artículos.") + " Revisa el borrador y confirma para guardarlo.");
+      const rows = result.lineas.map(line => ({
+        product: line.producto || "", variety: line.variedad || "", quantity: line.cantidad ?? "",
+        unit: line.unidad, price: line.precio, priceUnit: line.unidadPrecio, supplier: line.puesto, doubt: line.duda,
+      }));
+      assistantDraft(rows,company,date,text);
+      answer("He preparado " + rows.length + (rows.length === 1 ? " artículo." : " artículos.") + " Revisa el borrador y confirma para guardarlo.");
     } else {
       answer(result.respuesta);
       history = [...history,{role:"user",content:text},{role:"assistant",content:result.respuesta}].slice(-6);
@@ -651,7 +710,7 @@ window.aguSend = async function () {
   finally { busy = false; }
 };
 
-window.sg10AssistantBusy = () => busy;
+window.sg10AssistantBusy = () => busy || assignmentCommandBusy;
 window.sg10FormPurchase = (data) => {
   if ($("sg10Tara") && $("sg10Vat") && page === "compras") {
     for (const [id,key,max] of [["sg10Tara","tara",10000],["sg10Vat","vatRate",100]]) {

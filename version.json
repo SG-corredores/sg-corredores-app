@@ -1,6 +1,8 @@
 {
-  "version":"10.0.0-rc.8",
-  "news":[
+  "version": "10.0.0-rc.9",
+  "news": [
+    "Recepción por cliente con confirmación de cada línea y navegación al deslizar.",
+    "Asignaciones por empleado, listas abreviadas, impresión A4 e interpretación de pedidos con PIN autorizado.",
     "Compras en una tabla compacta y acceso rápido a pedidos para mañana.",
     "Zona Clientes con galería continua y tarjetas, subida de fotos desde el móvil y saludo de Aguacatín al abrirlo.",
     "Portada y galería renovadas en la Zona Clientes, con el logotipo y el verde de Serrano Gago.",
