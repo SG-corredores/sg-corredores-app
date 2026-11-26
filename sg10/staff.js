@@ -1,6 +1,6 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.14";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.17";
 import { installWalkie } from "./walkie.js?v=2";
-import { installOperations } from "./operations.js?v=10.0.0-rc.14";
+import { installOperations } from "./operations.js?v=10.0.0-rc.17";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -93,13 +93,14 @@ function decorateDaily() {
   }
   if (summary) {
     addButton("Hoy", () => { sgNavDate = today(); render(); });
-    if (role === "owner") addButton("Gestionar compradores", () => window.sg10ManageBuyers?.());
+    if (role === "owner" && !user?.is_anonymous) addButton("Gestionar compradores", () => window.sg10ManageBuyers?.());
   } else {
     addButton("+ Nuevo pedido", () => {
       keepSelection();
       window.sg10OpenNewOrder?.();
       requestAnimationFrame(() => $("dailyProduct")?.focus());
     });
+    addButton("Añadir por voz", () => { keepSelection(); dictateOrder(company.value, sgNavDate); });
     addButton("Importar WhatsApp o foto", () => { keepSelection(); window.sgImportOpen(); });
   }
 
@@ -700,6 +701,94 @@ function assistantDraft(rows, selectedClient, date, sourceMessage) {
   };
 }
 
+async function orderDraftLines(text) {
+  const result = await invoke(api,"sg-interpretar",{workspace,texto:text});
+  if (result.truncado) throw Error("Puedes confirmar hasta 30 artículos por pedido. Dicta el pedido en dos partes.");
+  if (!result.lineas?.length) throw Error("No he encontrado artículos. Indica el producto y su cantidad.");
+  return result.lineas.map(line => ({
+    product: line.producto || "", variety: line.variedad || "", quantity: line.cantidad ?? "",
+    unit: line.unidad, price: line.precio, priceUnit: line.unidadPrecio, supplier: line.puesto, doubt: line.duda,
+  }));
+}
+function dictateOrder(client, selectedDate) {
+  const account = currentScope();
+  const box = operations.dialog("Añadir pedido por voz");
+  const form = document.createElement("form");
+  form.innerHTML = '<label>Pedido dictado<textarea name="orderText" rows="4" required></textarea></label>'
+    + '<div class="sg10-tools"><button type="button" data-record>Dictar</button>'
+    + '<button type="submit">Revisar pedido</button></div><p data-status role="status"></p>';
+  box.querySelector("[data-content]").append(form);
+  const field = form.elements.orderText;
+  const recordButton = form.querySelector("[data-record]");
+  const submitButton = form.querySelector('[type="submit"]');
+  const status = form.querySelector("[data-status]");
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let mic, listening = false, interpreting = false;
+  recordButton.onclick = () => {
+    if (listening) { mic.stop(); return; }
+    if (!Recognition || interpreting) return;
+    mic = new Recognition();
+    mic.lang = "es-ES";
+    let heard = "";
+    listening = true;
+    recordButton.textContent = "Terminar dictado";
+    submitButton.disabled = true;
+    status.textContent = "Escuchando…";
+    mic.onresult = event => {
+      heard += Array.from(event.results).slice(event.resultIndex).map(result => result[0]?.transcript || "").join(" ");
+    };
+    mic.onerror = event => {
+      status.textContent = event.error === "not-allowed" || event.error === "service-not-allowed"
+        ? "Permite el micrófono para dictar el pedido." : "No se ha podido transcribir. Vuelve a dictar o escribe el pedido.";
+    };
+    const stopped = () => {
+      listening = false;
+      recordButton.textContent = "Dictar";
+      submitButton.disabled = false;
+      if (!heard.trim() || !box.open) {
+        if (box.open && status.textContent === "Escuchando…") status.textContent = "No se ha oído el pedido. Vuelve a dictar.";
+        return;
+      }
+      field.value = [field.value.trim(),heard.trim()].filter(Boolean).join(" ");
+      status.textContent = "Revisa lo dictado y pulsa «Revisar pedido».";
+    };
+    mic.onend = stopped;
+    try { mic.start(); }
+    catch {
+      status.textContent = "No se pudo abrir el micrófono. Vuelve a pulsar «Dictar».";
+      stopped();
+    }
+  };
+  box.addEventListener("close",() => { if (listening) mic.abort(); },{once:true});
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const text = field.value.trim();
+    if (!text || listening || interpreting || account !== currentScope()) return;
+    interpreting = true;
+    recordButton.disabled = submitButton.disabled = true;
+    status.textContent = "Preparando el borrador…";
+    try {
+      const rows = await orderDraftLines(text);
+      if (!box.open || account !== currentScope()) return;
+      const namedClient = matchCompany(text,records.clients.map(row => ({id:row.id,name:d(row).name})));
+      const date = window.sg10WorkDate?.(text,selectedDate) || selectedDate;
+      box.close();
+      assistantDraft(rows,namedClient || client,date,text);
+    } catch (error) {
+      status.textContent = error.message || "No se pudo interpretar el pedido.";
+    } finally {
+      interpreting = false;
+      recordButton.disabled = submitButton.disabled = false;
+    }
+  };
+  if (Recognition) recordButton.click();
+  else {
+    recordButton.disabled = true;
+    status.textContent = "Este navegador no admite dictado. Puedes escribir el pedido aquí.";
+    field.focus();
+  }
+}
+
 let assignmentCommandBusy = false;
 const legacySend = window.aguSend;
 window.aguSend = async function () {
@@ -724,19 +813,14 @@ window.aguSend = async function () {
   $("aguBubble").textContent = mode === "pedido" ? "Preparando el borrador…" : "Consultando los datos…";
   try {
     const result = mode === "pedido"
-      ? await invoke(api,"sg-interpretar",{workspace,texto:text})
+      ? await orderDraftLines(text)
       : await invoke(api,"sg10-aguacatin",{
         workspace,mode,text,date,history,deep:/\b(analiza|compara|incoherencia|discrepancia|explica|a fondo|detallado|resumen complejo)\b/.test(query),
       });
     if (account !== currentScope() || $("aguControls").hidden) return;
     if (mode === "pedido") {
-      if (result.truncado) throw Error("Puedes confirmar hasta 30 artículos por pedido. Dicta el pedido en dos partes.");
-      if (!result.lineas?.length) throw Error("No he encontrado artículos. Indica el producto y su cantidad.");
       const company = matchCompany(text,records.clients.map(row => ({id:row.id,name:d(row).name})));
-      const rows = result.lineas.map(line => ({
-        product: line.producto || "", variety: line.variedad || "", quantity: line.cantidad ?? "",
-        unit: line.unidad, price: line.precio, priceUnit: line.unidadPrecio, supplier: line.puesto, doubt: line.duda,
-      }));
+      const rows = result;
       assistantDraft(rows,company,date,text);
       answer("He preparado " + rows.length + (rows.length === 1 ? " artículo." : " artículos.") + " Revisa el borrador y confirma para guardarlo.");
     } else {

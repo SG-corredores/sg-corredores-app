@@ -40,6 +40,7 @@
   };
   let workspaceScope = "";
   let members = new Map();
+  let buyers = new Map();
   let assignments = new Map();
   let selected = new Set();
   let loaded = false;
@@ -57,11 +58,11 @@
 
   function currentAssignee(id) {
     const uid = assignments.get(id)?.assignee;
-    return members.has(uid) ? uid : null;
+    return members.has(uid) || buyers.has(uid) ? uid : null;
   }
-  const person = uid => members.get(uid)?.name || "Sin asignar";
+  const person = uid => buyers.get(uid)?.name || members.get(uid)?.name || "Sin asignar";
   function colour(uid) {
-    const index = [...members.keys()].sort().indexOf(uid);
+    const index = [...new Set([...members.keys(),...buyers.keys()])].sort().indexOf(uid);
     const hue = Math.round((index * 137.508 + 225) % 360);
     return "hsl(" + hue + " 64% 33%)";
   }
@@ -69,9 +70,12 @@
     return uid ? '<span class="sg-work-person" style="--employee-colour:' + colour(uid) + '">' + esc(person(uid)) + "</span>" :
       '<span class="sg-work-unassigned">Sin asignar</span>';
   }
-  const canEdit = id => role === "owner" || !currentAssignee(id) || currentAssignee(id) === user?.id;
-  const membersSorted = () => [...members.values()].sort((a, b) => a.name.localeCompare(b.name, "es") || a.id.localeCompare(b.id));
-  const memberOptions = value => membersSorted().map(m =>
+  const canEdit = id => role === "owner" || !currentAssignee(id) || buyers.has(currentAssignee(id)) || currentAssignee(id) === user?.id;
+  const byName = (a, b) => a.name.localeCompare(b.name, "es") || a.id.localeCompare(b.id);
+  const membersSorted = () => [...members.values()].sort(byName);
+  const buyersSorted = () => [...buyers.values()].sort(byName);
+  const assigneesSorted = () => [...members.values(),...buyers.values()].sort(byName);
+  const memberOptions = (value, list = assigneesSorted()) => list.map(m =>
     '<option value="' + esc(m.id) + '"' + (m.id === value ? " selected" : "") + ">" + esc(m.name) + "</option>").join("");
 
   async function allRows(connection, table, columns, order, space) {
@@ -99,15 +103,17 @@
       allRows(connection, "sg_members", "user_id,role", "user_id", space),
       allRows(connection, "sg10_staff_names", "user_id,display_name", "user_id", space),
       allRows(connection, "sg10_purchase_assignments", "order_id,assignee,revision", "order_id", space),
-    ]).then(([staff, names, assigned]) => {
+      allRows(connection, "sg10_buyers", "id,display_name", "id", space),
+    ]).then(([staff, names, assigned, directory]) => {
       if (scope() !== account) return;
       const displayNames = new Map(names.map(row => [row.user_id, row.display_name]));
       members = new Map(staff.map((row) => [row.user_id, {
         id: row.user_id,
         name: displayNames.get(row.user_id) || (row.role === "owner" ? "Administrador" : "Empleado " + row.user_id.slice(0, 6)),
       }]));
+      buyers = new Map(directory.map(row => [row.id,{id:row.id,name:row.display_name}]));
       assignments = new Map(assigned.map(row => [row.order_id, row]));
-      if (!members.has(employee)) employee = user.id;
+      if (!members.has(employee) && !buyers.has(employee)) employee = user.id;
       loaded = true;
       teamError = "";
     }).catch(error => {
@@ -131,6 +137,7 @@
     live = null;
     workspaceScope = account;
     members.clear();
+    buyers.clear();
     assignments.clear();
     selected.clear();
     opened.clear();
@@ -143,7 +150,7 @@
     employee = user.id;
     liveApi = api;
     live = api.channel("sg-purchase-work-" + crypto.randomUUID());
-    for (const table of ["sg10_purchase_assignments", "sg10_staff_names"]) {
+    for (const table of ["sg10_purchase_assignments", "sg10_staff_names", "sg10_buyers"]) {
       live.on("postgres_changes", { event: "*", schema: "public", table, filter: "workspace_id=eq." + workspace }, schedule);
     }
     live.subscribe((state) => { if (state === "SUBSCRIBED" && scope() === account) load(); });
@@ -187,11 +194,12 @@
     const summary = page === "resumenpedidos";
     if (summary) bar.classList.add("sg-work-actions-grid");
     bar.innerHTML = '<label class="sg-work-select"><input type="checkbox" data-all> Seleccionar todo</label>'
-      + '<button type="button" class="secondary" data-self>Asignarme</button>'
-      + (role === "owner" ? '<select aria-label="' + (summary ? 'Comprador' : 'Empleado responsable') + '" data-employee>'
-        + (summary ? '<option value="">Elegir comprador</option>' : '') + memberOptions(summary ? '' : user.id)
+      + (!summary ? '<button type="button" class="secondary" data-self>Asignarme</button>' : "")
+      + (summary || role === "owner" ? '<select aria-label="' + (summary ? 'Comprador' : 'Empleado responsable') + '" data-employee>'
+        + (summary ? '<option value="">Elegir comprador</option>' : '') + memberOptions(summary ? '' : user.id, summary ? buyersSorted() : assigneesSorted())
         + '</select><button type="button" class="secondary" data-assign>Asignar</button>' : "")
-      + '<button type="button" class="secondary" data-release>Retirar asignación</button><span data-count role="status"></span>';
+      + (!summary || role === "owner" ? '<button type="button" class="secondary" data-release>Retirar asignación</button>' : "")
+      + '<span data-count role="status"></span>';
     root.append(bar);
     const all = bar.querySelector("[data-all]");
     const controls = [...bar.querySelectorAll("button,select")];
@@ -227,8 +235,9 @@
         if (result != null) toast(result ? result + (target ? " asignadas." : " liberadas.") : "La selección ya tenía ese estado.");
       } catch (error) { toast(err(error)); }
     };
-    bar.querySelector("[data-self]").onclick = () => run(user.id);
-    bar.querySelector("[data-release]").onclick = () => run(null);
+    const self = bar.querySelector("[data-self]"), release = bar.querySelector("[data-release]");
+    if (self) self.onclick = () => run(user.id);
+    if (release) release.onclick = () => run(null);
     if (assignButton) {
       buyer.onchange = update;
       assignButton.onclick = () => { if (buyer.value) run(buyer.value); };
@@ -273,21 +282,17 @@
     if (day) sgNavDate = day;
     go("micompra");
   }
-  function configureNames(buyers = false) {
+  function configureNames() {
     const dialog = document.createElement("dialog");
     dialog.className = "sg-work-team";
-    dialog.innerHTML = '<h2>' + (buyers ? 'Gestionar compradores' : 'Nombres de empleados')
-      + '</h2><form><label>' + (buyers ? 'Comprador' : 'Empleado') + '<select name="employee">'
-      + memberOptions(user.id) + '</select></label><label>Nombre visible<input name="displayName" required maxlength="60"></label>'
+    dialog.innerHTML = '<h2>Nombres de empleados</h2><form><label>Empleado<select name="employee">'
+      + memberOptions(user.id,membersSorted()) + '</select></label><label>Nombre visible<input name="displayName" required maxlength="60"></label>'
       + '<div class="actions"><button class="primary" type="submit">Guardar nombre</button><button type="button" data-close>Cerrar</button>'
-      + (buyers && !user.is_anonymous ? '<button type="button" data-new-buyer>Añadir comprador</button>' : '')
       + '</div><p role="status"></p></form>';
     const form = dialog.querySelector("form");
     form.elements.employee.onchange = () => { form.elements.displayName.value = person(form.elements.employee.value); };
     form.elements.employee.onchange();
     form.querySelector('[data-close]').onclick = () => dialog.close();
-    const add = form.querySelector('[data-new-buyer]');
-    if (add) add.onclick = () => { dialog.close(); createEmployeePin(true); };
     dialog.onclose = () => dialog.remove();
     const account = scope();
     form.onsubmit = async event => {
@@ -310,13 +315,59 @@
     dialog.showModal();
   }
 
-  function createEmployeePin(buyer = false) {
+  function manageBuyers() {
+    if (role !== "owner" || user?.is_anonymous) return;
+    if (!loaded) return toast("Espera a que se sincronicen los compradores.");
+    const account = scope();
+    const dialog = document.createElement("dialog");
+    dialog.className = "sg-work-team";
+    dialog.innerHTML = '<h2>Gestionar compradores</h2><form><label>Comprador<select name="buyer"></select></label>'
+      + '<label>Nombre<input name="name" required maxlength="60"></label>'
+      + '<div class="actions"><button type="submit" class="primary">Guardar comprador</button>'
+      + '<button type="button" data-close>Cerrar</button></div><p role="status"></p></form>';
+    const form = dialog.querySelector("form");
+    const {buyer,name} = form.elements;
+    const status = form.querySelector("[role=status]");
+    function options(value = "") {
+      buyer.innerHTML = '<option value="">Añadir comprador</option>' + memberOptions(value,buyersSorted());
+      buyer.value = value;
+      name.value = buyers.get(value)?.name || "";
+    }
+    options();
+    buyer.onchange = () => { name.value = buyers.get(buyer.value)?.name || ""; };
+    form.querySelector("[data-close]").onclick = () => dialog.close();
+    dialog.onclose = () => dialog.remove();
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (scope() !== account || role !== "owner" || user?.is_anonymous) return dialog.close();
+      const displayName = name.value.trim(), id = buyer.value;
+      if (!displayName) return;
+      event.submitter.disabled = true;
+      try {
+        const table = api.from("sg10_buyers");
+        const response = id
+          ? await table.update({ display_name: displayName }).eq("workspace_id",workspace).eq("id",id).select("id").single()
+          : await table.insert({ workspace_id: workspace, display_name: displayName }).select("id").single();
+        if (response.error) throw response.error;
+        if (loading?.account === account) await loading.promise;
+        await load();
+        if (scope() !== account || !dialog.open) return;
+        options(response.data.id);
+        status.textContent = "Comprador guardado.";
+      } catch (error) {
+        status.textContent = error.code === "23505" ? "Ya existe un comprador con ese nombre." : err(error);
+      } finally { event.submitter.disabled = false; }
+    };
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
+  function createEmployeePin() {
     if (role !== "owner" || !scope() || user.is_anonymous) return;
     const account = scope();
     const dialog = document.createElement("dialog");
     dialog.className = "sg-work-team";
-    const title = buyer ? 'Comprador' : 'Empleado';
-    dialog.innerHTML = '<h2>Añadir ' + title.toLowerCase() + ' con PIN</h2><form><label>Nombre<input name="name" required maxlength="60"></label>'
+    dialog.innerHTML = '<h2>Añadir empleado con PIN</h2><form><label>Nombre<input name="name" required maxlength="60"></label>'
       + '<div class="actions"><button class="primary" type="submit">Crear PIN</button><button type="button">Cerrar</button></div>'
       + '<p role="status" aria-live="polite"></p></form>';
     const form = dialog.querySelector("form");
@@ -584,9 +635,9 @@
     if (!prices.length && moneyLabel(data)) prices.push(moneyLabel(data));
     if (!suppliers.length && data.supplier) suppliers.push(data.supplier);
     const activeBuyer = currentAssignee(row.id);
-    const buyers = [...new Set([activeBuyer, ...purchases.map(p => d(p).buyerId)].filter(uid => members.has(uid)))];
+    const creditedBuyers = [...new Set([activeBuyer, ...purchases.map(p => d(p).buyerId)].filter(uid => members.has(uid) || buyers.has(uid)))];
     return { quantity: amountLabel(row, amount), product: prefix + (details ? productName(row) : [productName(row), data.notes].filter(Boolean).join(" · ")),
-      price: prices.join(" · "), supplier: suppliers.join(" · "), buyers: buyers.map(person).join(" · ") };
+      price: prices.join(" · "), supplier: suppliers.join(" · "), buyers: creditedBuyers.map(person).join(" · ") };
   }
   function printOrders(client, day, summary = false) {
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
@@ -679,7 +730,7 @@
   let pendingVoice;
   let pendingEmployee;
   function confirmAssignment(day, filter, target, answer) {
-    if (role !== "owner" && target !== user.id) { answer("Para asignar mercancía a otra persona hace falta acceso de administrador."); return; }
+    if (role !== "owner" && target !== user.id && !buyers.has(target)) { answer("Elige un comprador de la lista."); return; }
     const rows = listRows(day, "", filter).filter(row => canEdit(row.id) && currentAssignee(row.id) !== target);
     if (!rows.length) { answer("No encuentro líneas pendientes de " + filter + " que puedas asignar."); return; }
     pendingVoice = { scope: scope(), expires: Date.now() + 120000, target,
@@ -694,7 +745,7 @@
       const pending = pendingEmployee;
       pendingEmployee = null;
       if (pending.scope === scope() && pending.expires > Date.now()) {
-        const target = /^(mi|yo|a mi|para mi)$/.test(query) ? user.id : entity(query, membersSorted());
+        const target = /^(mi|yo|a mi|para mi)$/.test(query) ? user.id : entity(query, assigneesSorted());
         if (target) { confirmAssignment(pending.day, pending.filter, target, answer); return true; }
         if (/^(no|cancela)$/.test(query)) { answer("Asignación cancelada."); return true; }
       }
@@ -715,7 +766,7 @@
       if (/\bmi lista|\bmis compras|\bmi compra/.test(query)) {
         if (printList(day, user.id, "", true)) answer("He abierto la impresión de tu lista de compra.");
       } else if (/\bcompra|\bcompras\b/.test(query)) {
-        const target = entity(query, membersSorted());
+        const target = entity(query, assigneesSorted());
         if (printList(day, target, "", !/\b(?:detallada|desglosada)\b/.test(query))) answer("He abierto la impresión de la lista de compra.");
       } else {
         const customer = entity(query, records.clients.map(row => ({ id: row.id, name: d(row).name })));
@@ -745,7 +796,7 @@
     const command = query.match(/^(?:asigna(?:le|me)?|reparte)\s+(.+?)(?:\s+(?:al|a)\s+(.+))?$/);
     if (command) {
       if (!loaded) { answer("Espera a que se sincronice la lista de empleados."); return true; }
-      const target = query.startsWith("asigname ") || /^(mi|yo)$/.test(command[2] || "") ? user.id : entity(command[2] || "", membersSorted());
+      const target = query.startsWith("asigname ") || /^(mi|yo)$/.test(command[2] || "") ? user.id : entity(command[2] || "", assigneesSorted());
       const filter = command[1].replace(/^(?:(?:todos?|todas?)\s+)?(?:(?:los|las)\s+)?(?:pedidos de\s+)?/, "")
         .replace(/\s+(?:(?:de|para)\s+)?(?:hoy|ayer|manana|pasado manana|20\d{2} \d{2} \d{2})$/, "");
       if (!target) {
@@ -761,11 +812,7 @@
   window.sg10CreateEmployeePin = createEmployeePin;
   window.sg10PendingQuantity = remaining;
   window.sg10DecorateOrderAssignments = decorateOrders;
-  window.sg10ManageBuyers = () => {
-    if (role !== "owner") return;
-    if (!loaded) return toast("Espera a que se sincronicen los compradores.");
-    configureNames(true);
-  };
+  window.sg10ManageBuyers = manageBuyers;
   window.sgPrint82 = () => printOrders($("dailyClient")?.value || sgSelectedClient(), sgClientDate(), page === "resumenpedidos");
   window.sg10WorkVoice = voice;
   window.sg10WorkDate = dateFrom;

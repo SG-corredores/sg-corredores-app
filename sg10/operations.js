@@ -64,34 +64,53 @@ function findCompany(doc, clients) {
   return same.length === 1 ? same[0].id : null;
 }
 
+const activeInvoiceReference = ({data}) => !["Cancelado","Anulado"].includes(data.status);
+const invoiceNumber = value => /^-?\d+(?:\.\d+)?$/.test(String(value ?? "")) ? Number(value) : NaN;
+function invoicePriceUnit(value) {
+  const unit = normalized(value);
+  if (/\b(?:kg|kilo|kilos)\b/.test(unit)) return "kg";
+  if (/\b(?:caja|cajas)\b/.test(unit)) return "caja";
+  if (/\b(?:pale|pales|palet|palets)\b/.test(unit)) return "pale";
+  return "";
+}
+
 function compareInvoice(invoice, purchases, orders) {
   const doc = invoice.invoice_data;
-  if (doc.tipo === "abono") return invoice.sg10_original_id ? [] : ["Vincula el abono a la factura original antes de aprobarlo."];
-  const matchesOrder = orders.some(({data}) => doc.client_id && data.clientId === doc.client_id && data.date === doc.fecha
-    && !["Cancelado","Anulado"].includes(data.status));
-  const findings = [];
-  if (!matchesOrder) findings.push("No hay pedido del día asociado a esa empresa.");
-  if (!invoiceKey(doc)) findings.push("Faltan número, fecha o CIF del asentador.");
-  if (!Array.isArray(doc.lineas) || !doc.lineas.length) findings.push("El documento no tiene líneas extraídas.");
+  if (doc.tipo === "abono" || !doc.client_id || !todayMatch(doc.fecha)) return [];
+  const forCustomerDay = row => activeInvoiceReference(row) && row.data.clientId === doc.client_id && row.data.date === doc.fecha;
+  const ordered = orders.filter(forCustomerDay);
+  if (!ordered.length) return ["No hay pedido de ese cliente para la fecha de la factura."];
+
+  const bought = purchases.filter(forCustomerDay);
+  const provider = normalized(doc.proveedor);
+  const findings = new Set();
   for (const line of Array.isArray(doc.lineas) ? doc.lineas : []) {
-    const select = purchases.filter(({data:x}) => (doc.client_id && x.clientId === doc.client_id && x.date === doc.fecha
-      && !["Anulado","Cancelado"].includes(x.status) && canonicalProduct(x.product) === canonicalProduct(line.producto)));
-    if (!select.length) { findings.push((line.producto || "Artículo sin nombre") + " · Sin compra coincidente."); continue; }
-    const forSupplier = select.filter(({data:x}) => normalized(x.supplier) === normalized(doc.proveedor));
-    const rows = forSupplier.length ? forSupplier : select;
-    if (!forSupplier.length) findings.push(line.producto + " · Revisa la correspondencia del asentador.");
-    const sumBoxes = rows.reduce((n,{data:x}) => n + (Number(x.boxes)||0),0);
-    if (number(line.cajas) && Math.abs(line.cajas-sumBoxes) > 0.001) findings.push(line.producto + " · Bultos distintos ("+line.cajas+" / "+sumBoxes+").");
-    const weights = rows.map(({data:x}) => x.weightMode === "fixed" ? Number(x.boxes)*Number(x.kgPerBox) : Number(x.kg));
-    const kilos = weights.reduce((n,x) => n+x,0);
-    if (number(line.kilos_netos) && weights.every(x => x>0) && Math.abs(line.kilos_netos-kilos)>0.01)
-      findings.push(line.producto + " · Kilos distintos ("+line.kilos_netos+" / "+kilos+").");
-    if (number(line.precio) && !rows.some(({data:x}) => (x.priceCents != null || x.price != null)
-      && Math.abs(line.precio-(x.priceCents != null ? x.priceCents/100 : Number(x.price)))<0.00001)) {
-      findings.push(line.producto + " · Precio distinto o pendiente.");
+    const product = canonicalProduct(line?.producto);
+    if (!product) continue;
+    const orderLines = ordered.filter(row => canonicalProduct(row.data.product) === product);
+    if (!orderLines.length) {
+      findings.add(line.producto + " · No figura en el pedido.");
+      continue;
+    }
+    const price = invoiceNumber(line.precio);
+    if (!number(price)) continue;
+    const orderIds = new Set(orderLines.map(row => row.id));
+    const samePurchase = bought.filter(({data}) => (orderIds.has(data.orderId) || canonicalProduct(data.product) === product)
+      && (!provider || normalized(data.supplier) === provider));
+    const reference = samePurchase.length ? samePurchase : orderLines.filter(({data}) =>
+      !provider || !normalized(data.supplier) || normalized(data.supplier) === provider);
+    const unit = invoicePriceUnit(line.unidad_precio ?? line.priceUnit);
+    const prices = reference.map(({data}) => ({
+      value: data.priceCents != null ? invoiceNumber(data.priceCents)/100 : invoiceNumber(data.price),
+      unit: invoicePriceUnit(data.priceUnit) || "kg",
+    })).filter(entry => number(entry.value) && (!unit || entry.unit === unit));
+    if (!prices.length || (!unit && new Set(prices.map(entry => entry.unit)).size > 1)) continue;
+    if (prices.every(entry => Math.abs(price-entry.value) >= 0.0001)) {
+      const expected = [...new Set(prices.map(entry => formatting.format(entry.value)))].join(" / ");
+      findings.add(line.producto + " · Precio distinto (factura " + formatting.format(price) + " · registrado " + expected + ").");
     }
   }
-  return findings;
+  return [...findings];
 }
 
 export function installOperations({ connection, refresh, date, formatPallets }) {
@@ -359,18 +378,26 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       +' − '+esc(formatting.format(row.credit))+' = <strong>'+esc(formatting.format(row.net))+'</strong></p>').join(""):"";
     const list=document.getElementById("sg10InvoiceList");
     if (!list) return;
-    list.innerHTML=invoiceRows.map(row=>{
+    const pending = [];
+    const history = [];
+    for (const row of invoiceRows) {
       const findings=compareInvoice(row,records.purchases,records.orders);
       const x=row.invoice_data;
-      return '<div class="item" data-invoice="' + esc(row.id) + '"><b>' + (x.tipo==="abono" ? "Abono · " : "")+esc(row.invoice_number || "Sin número")
+      const needsReview = findings.length > 0 && !row.approved_at;
+      const label = row.approved_at ? "Aprobada" : needsReview ? "Pendiente de revisión" : "En historial";
+      const markup = '<div class="item" data-invoice="' + esc(row.id) + '"><b>' + (x.tipo==="abono" ? "Abono · " : "")+esc(row.invoice_number || "Sin número")
         + '</b> · ' + esc(row.customer_name || "Cliente por identificar") + '<p>' + esc(x.fecha) + ' · ' + esc(x.proveedor)
-        + ' · ' + esc(row.approved_at ? "Aprobada" : "Pendiente de revisión") + '</p><p>' + esc(x.total==null ? "Sin importe" : formatting.format(x.total))
-        + '</p>' + (findings.length ? '<ul>' + findings.map(item=>'<li>'+esc(item)+'</li>').join("")+'</ul>' : '<p>Sin discrepancias en los datos comparables.</p>')
+        + ' · ' + esc(label) + '</p><p>' + esc(x.total==null ? "Sin importe" : formatting.format(x.total))
+        + '</p>' + (findings.length ? '<ul>' + findings.map(item=>'<li>'+esc(item)+'</li>').join("")+'</ul>' : '')
         + '<button onclick="sg10Ops(\'reviewInvoice\',this.closest(\'[data-invoice]\').dataset.invoice)">Ver'
-        + (roleOwner() ? ' y revisar' : '') + '</button></div>';
-    }).join("") || "<p>Sin facturas guardadas.</p>";
+        + (needsReview && roleOwner() ? ' y revisar' : '') + '</button></div>';
+      (needsReview ? pending : history).push(markup);
+    }
+    list.innerHTML = '<h3>Facturas para revisar</h3>'
+      + (pending.length ? pending.join("") : "<p>No hay facturas para revisar.</p>")
+      + (history.length ? '<details><summary>Historial de facturas ('+history.length+')</summary>'+history.join("")+'</details>' : "");
     const open=target&&list.querySelector('[data-invoice="'+CSS.escape(target)+'"]');
-    if(open) { open.classList.add("sg10-highlight");open.scrollIntoView({block:"center"});target=""; }
+    if(open) { const section=open.closest("details"); if(section)section.open=true; open.classList.add("sg10-highlight");open.scrollIntoView({block:"center"});target=""; }
   }
 
   async function importInvoices(button) {
@@ -576,9 +603,9 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       let edited;
       try {
         total=decimal(value("total"));
-        edited=[...form.querySelectorAll("fieldset")].map(field=>{
+        edited=[...form.querySelectorAll("fieldset")].map((field,index)=>{
           const get=(name)=>field.querySelector('[name="'+name+'"]').value;
-          return {producto:get("product").trim(),cajas:decimal(get("boxes")),kilos_netos:decimal(get("kg")),precio:decimal(get("price"))};
+          return {...lines[index],producto:get("product").trim(),cajas:decimal(get("boxes")),kilos_netos:decimal(get("kg")),precio:decimal(get("price"))};
         });
       }catch(error){return feedback.textContent=error.message;}
       const company=state().records.clients.find(c=>c.id===value("company"));

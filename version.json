@@ -1,6 +1,8 @@
 {
-  "version": "10.0.0-rc.16",
+  "version": "10.0.0-rc.17",
   "news": [
+    "Dicta pedidos desde Pedidos y añade compradores por nombre desde el resumen, sin PIN.",
+    "Solo se marcan para revisión las facturas con precio distinto o mercancía que no figura en el pedido.",
     "Walkie-talkie con activación de audio al tocar y confirmación de envío de voz.",
     "Cargas muestra producto, cantidad y puesto, con confirmación de recepción por compra.",
     "La columna de comprador aparece solo en Resumen de pedidos.",

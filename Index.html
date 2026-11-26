@@ -1221,7 +1221,7 @@ async function run(msg){if(busy)return;busy=true;try{
  }catch(e){pending=null;say(e.message||'No he podido completar la operación');}finally{busy=false;}}
 window.aguSend=async()=>{const el=$('aguFloatInput'),msg=el.value.trim();if(!msg||busy)return;el.value='';await run(msg);};window.askAgu=async()=>{const msg=$('aguQuestion')?.value.trim();if(msg)await run(msg);};
 })();
-</script><script src="./sg10/purchase-work.js?v=10.0.0-rc.16"></script><style id="sg-responsive-assistant">
+</script><script src="./sg10/purchase-work.js?v=10.0.0-rc.17"></script><style id="sg-responsive-assistant">
 html,body{max-width:100%;overflow-x:clip}#app,#content,#nav{min-width:0;max-width:100%}#nav{overflow-x:auto}
 #aguFloat:not(.aguExpanded){width:83px;max-width:83px;align-items:center;transform:none}
 #aguFloat:not(.aguExpanded) #aguAvatar{width:83px;height:114px;flex:none;transition:none}
@@ -1248,4 +1248,4 @@ settings=function(){return old()+((role==='owner'&&user&&!user.is_anonymous)?`<d
 let busy=false;
 window.sgInviteEmployee=async function(e){e.preventDefault();if(busy||role!=='owner'||!user||user.is_anonymous)return;const form=e.currentTarget,button=form.querySelector('button'),field=document.getElementById('sgInviteEmail'),status=document.getElementById('sgInviteStatus');if(!field.checkValidity())return;const email=field.value.trim(),space=workspace,uid=user.id;if(!confirm('¿Enviar invitación a '+email+'?'))return;busy=true;button.disabled=true;status.textContent='Enviando invitación…';try{const {data,error}=await api.auth.getSession();if(error||!data.session)throw Error('Inicia sesión de nuevo');const r=await api.functions.invoke('sg-invitar-empleado',{body:{email,workspace_id:space},headers:{Authorization:'Bearer '+data.session.access_token}});if(r.error){let msg=r.error.message;try{const j=await r.error.context.json();msg=j.error||msg}catch{}throw Error(msg)}if(!r.data?.ok)throw Error(r.data?.error||'No se confirmó la invitación');if(user?.id===uid&&workspace===space){status.textContent='Invitación enviada. El empleado debe abrir el enlace de su correo.';field.value='';toast('Invitación enviada')}}catch(err){if(user?.id===uid&&workspace===space){status.textContent=err.message;toast(err.message)}}finally{busy=false;button.disabled=false}};
 })();
-</script><script type="module" src="./sg10/staff.js?v=10.0.0-rc.16"></script></body></html>
+</script><script type="module" src="./sg10/staff.js?v=10.0.0-rc.17"></script></body></html>
