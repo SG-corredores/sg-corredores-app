@@ -1,5 +1,5 @@
 {
-  "version": "10.0.0-rc.18",
+  "version": "10.0.0-rc.19",
   "news": [
     "Cada comprador tiene su lista y el administrador puede marcar otros nombres o ver las líneas sin asignar.",
     "Dicta pedidos desde Pedidos y añade compradores por nombre desde el resumen, sin PIN.",

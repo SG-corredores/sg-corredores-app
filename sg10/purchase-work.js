@@ -82,7 +82,7 @@
   const byName = (a, b) => a.name.localeCompare(b.name, "es") || a.id.localeCompare(b.id);
   const membersSorted = () => [...members.values()].sort(byName);
   const buyersSorted = () => [...buyers.values()].sort(byName);
-  const assigneesSorted = () => [...members.values(),...buyers.values()].sort(byName);
+  const assigneesSorted = () => [...membersSorted().filter(row => !buyerByAccount.has(row.id)),...buyers.values()].sort(byName);
   const memberOptions = (value, list = assigneesSorted()) => list.map(m =>
     '<option value="' + esc(m.id) + '"' + (m.id === value ? " selected" : "") + ">" + esc(m.name) + "</option>").join("");
 
@@ -206,7 +206,7 @@
     bar.innerHTML = '<label class="sg-work-select"><input type="checkbox" data-all> Seleccionar todo</label>'
       + (!summary ? '<button type="button" class="secondary" data-self>Asignarme</button>' : "")
       + (summary || role === "owner" ? '<select aria-label="' + (summary ? 'Comprador' : 'Empleado responsable') + '" data-employee>'
-        + (summary ? '<option value="">Elegir comprador</option>' : '') + memberOptions(summary ? '' : user.id, summary ? buyersSorted() : assigneesSorted())
+        + (summary ? '<option value="">Elegir comprador</option>' : '') + memberOptions(summary ? '' : ownBuyer(), summary ? buyersSorted() : assigneesSorted())
         + '</select><button type="button" class="secondary" data-assign>Asignar</button>' : "")
       + (!summary || role === "owner" ? '<button type="button" class="secondary" data-release>Retirar asignación</button>' : "")
       + '<span data-count role="status"></span>';
@@ -246,7 +246,7 @@
       } catch (error) { toast(err(error)); }
     };
     const self = bar.querySelector("[data-self]"), release = bar.querySelector("[data-release]");
-    if (self) self.onclick = () => run(user.id);
+    if (self) self.onclick = () => run(ownBuyer());
     if (release) release.onclick = () => run(null);
     if (assignButton) {
       buyer.onchange = update;
@@ -285,7 +285,7 @@
     return groups;
   }
   const groupTotal = rows => Math.round(rows.reduce((total, row) => total + remaining(row), 0) * 1000) / 1000;
-  const groupMemberIds = rows => [...new Set(rows.map(row => currentAssignee(row.id)))];
+  const groupMemberIds = rows => [...new Set(rows.map(row => buyerKey(currentAssignee(row.id))))];
   function show(day, filter = "", onlyMine = false) {
     productFilter = filter;
     if (onlyMine && role === "owner") buyerChecks = new Set([ownBuyer()]);
@@ -433,8 +433,7 @@
     }
     const self = ownBuyer();
     const own = {id:self,name:person(self)+" (yo)"};
-    const others = [...buyersSorted(),...membersSorted().filter(row => !buyerByAccount.has(row.id))]
-      .filter(row => row.id !== self).sort(byName);
+    const others = assigneesSorted().filter(row => row.id !== self);
     const owner = role === "owner";
     const entries = owner ? [own,...others,{id:"",name:"Sin asignar"}] : [own];
     panel.innerHTML = legend + entries.map(({id,name}) =>
@@ -685,7 +684,7 @@
     if (!prices.length && moneyLabel(data)) prices.push(moneyLabel(data));
     if (!suppliers.length && data.supplier) suppliers.push(data.supplier);
     const activeBuyer = currentAssignee(row.id);
-    const creditedBuyers = [...new Set([activeBuyer, ...purchases.map(p => d(p).buyerId)].filter(uid => members.has(uid) || buyers.has(uid)))];
+    const creditedBuyers = [...new Set([activeBuyer, ...purchases.map(p => d(p).buyerId)].filter(uid => members.has(uid) || buyers.has(uid)).map(buyerKey))];
     return { quantity: amountLabel(row, amount), product: prefix + (details ? productName(row) : [productName(row), data.notes].filter(Boolean).join(" · ")),
       price: prices.join(" · "), supplier: suppliers.join(" · "), buyers: creditedBuyers.map(person).join(" · ") };
   }
@@ -795,7 +794,7 @@
       const pending = pendingEmployee;
       pendingEmployee = null;
       if (pending.scope === scope() && pending.expires > Date.now()) {
-        const target = /^(mi|yo|a mi|para mi)$/.test(query) ? user.id : entity(query, assigneesSorted());
+        const target = /^(mi|yo|a mi|para mi)$/.test(query) ? ownBuyer() : entity(query, assigneesSorted());
         if (target) { confirmAssignment(pending.day, pending.filter, target, answer); return true; }
         if (/^(no|cancela)$/.test(query)) { answer("Asignación cancelada."); return true; }
       }
@@ -846,7 +845,7 @@
     const command = query.match(/^(?:asigna(?:le|me)?|reparte)\s+(.+?)(?:\s+(?:al|a)\s+(.+))?$/);
     if (command) {
       if (!loaded) { answer("Espera a que se sincronice la lista de empleados."); return true; }
-      const target = query.startsWith("asigname ") || /^(mi|yo)$/.test(command[2] || "") ? user.id : entity(command[2] || "", assigneesSorted());
+      const target = query.startsWith("asigname ") || /^(mi|yo)$/.test(command[2] || "") ? ownBuyer() : entity(command[2] || "", assigneesSorted());
       const filter = command[1].replace(/^(?:(?:todos?|todas?)\s+)?(?:(?:los|las)\s+)?(?:pedidos de\s+)?/, "")
         .replace(/\s+(?:(?:de|para)\s+)?(?:hoy|ayer|manana|pasado manana|20\d{2} \d{2} \d{2})$/, "");
       if (!target) {
