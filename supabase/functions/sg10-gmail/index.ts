@@ -20,6 +20,23 @@ const systemPrompt = [
 ].join(" ");
 
 
+const textField = { type: ["string", "null"] };
+const numberField = { type: ["number", "null"] };
+function objectSchema(properties: Record<string, unknown>) {
+  return { type: "object", properties, required: Object.keys(properties), additionalProperties: false };
+}
+const invoiceSchema = objectSchema({
+  tipo: { type: "string", enum: ["factura", "abono", "otro"] },
+  proveedor: textField, cif_proveedor: textField, cliente: textField, cif_cliente: textField,
+  numero: textField, fecha: textField, numero_original: textField, destino_comercial: textField,
+  base: numberField, iva: numberField, total: numberField,
+  lineas: { type: "array", items: objectSchema({
+    producto: textField, variedad: textField, bultos: numberField, tara: numberField, kilos_netos: numberField,
+    precio: numberField, unidad_precio: textField, importe: numberField, iva_porcentaje: numberField,
+    importe_con_iva: numberField,
+  }) },
+});
+
 Deno.serve(async request => {
   if (request.method !== "POST") return new Response(null,{status:405});
   const worker = await authenticateWorker(request);
@@ -183,7 +200,7 @@ Deno.serve(async request => {
                 headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
                 body:JSON.stringify({model:Deno.env.get("SG10_INVOICE_MODEL")||"gpt-4.1-mini",store:false,max_output_tokens:12000,
                   instructions:systemPrompt,input:[{role:"user",content:[{type:"input_file",filename:"factura.pdf",file_data:"data:application/pdf;base64,"+padded},
-                    {type:"input_text",text:"Extrae los datos fiscales visibles de la factura o el abono y responde en JSON."}]}],text:{format:{type:"json_object"}}})});
+                    {type:"input_text",text:"Extrae los datos fiscales visibles de la factura o el abono y responde en JSON."}]}],text:{format:{type:"json_schema",name:"factura_gmail",strict:true,schema:invoiceSchema}}})});
               if (!ai.ok) {
                 const detail=await ai.json().catch(()=>null);
                 const code=String(detail?.error?.code??detail?.error?.type??"");
