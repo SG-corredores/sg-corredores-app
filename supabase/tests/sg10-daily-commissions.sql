@@ -4,7 +4,7 @@ do $$
 declare r record;
 begin
   for r in select * from (values
-    ('Cotelo','tomate',0.040), ('Cotelo y Naya','patata',0.040), ('Naya','patata',0.035),
+    ('Cotelo','tomate',0.040), ('Cotelo y Naya','patata',null::numeric), ('Naya','patata',0.035),
     ('Ortega Escolano','patata agria',0.020), ('Ortega','cebolla',0.020), ('Ortega','ajo',0.020),
     ('Huerta los naranjos','patata',0.020), ('Huerta los naranjos','cebolla',0.020),
     ('Huerta los naranjos','ajo',0.035), ('Ortega','tomate',0.035), ('Rocalla','patata',0.035)

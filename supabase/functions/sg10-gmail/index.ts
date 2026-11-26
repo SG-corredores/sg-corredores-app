@@ -11,6 +11,7 @@ const systemPrompt = [
   "Devuelve un único objeto JSON de tipo factura, abono u otro. Un albarán, un pedido o una proforma sin número fiscal es otro.",
   "Usa tipo, proveedor, cif_proveedor, cliente (razón social del destinatario), cif_cliente, numero, fecha (ISO),",
   "numero_original (solo si se cita explícitamente para un abono), base, iva (cuota total), total y lineas.",
+  "Añade destino_comercial si el documento identifica explícitamente un nombre operativo o sucursal diferente de la razón social.",
   "En cada línea real de mercancía usa producto (artículo literal), variedad si consta, bultos, tara (en kg), kilos_netos,",
   "precio (unitario), unidad_precio (solo kg, caja, bulto o pale cuando consta), importe (sin IVA),",
   "iva_porcentaje e importe_con_iva (si figura). No confundas kilos netos con brutos, cajas, unidades o tara.",
