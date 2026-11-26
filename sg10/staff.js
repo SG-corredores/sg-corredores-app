@@ -537,10 +537,7 @@ window.sg10PrintLoad = loadSheet;
 const originalExtra = window.sgExtra;
 window.sgExtra = function (target) {
   if (target === "facturas") return operations.invoiceView();
-  if (target === "cargas") return '<div class="card"><h2>Cargas y paletizaje</h2><div class="grid"><label>Fecha <input id="sg10LoadDate" type="date" value="'
-    + html(sgClientDate()) + '"></label><label>Cliente <select id="sg10LoadCompany"><option value="">Todos</option>'
-    + options(sgSelectedClient()) + '</select></label></div><div class="sg10-tools"><button onclick="sg10PrintLoad()">Imprimir hoja A4</button>'
-    + '<button onclick="sgGo(\'pales\')">Palets por cliente</button><button onclick="sg10Ops(\'camera\')">Recuento con cámara</button></div></div>' + originalExtra(target);
+  if (target === "cargas") return window.sg10Reception(true);
   return originalExtra(target);
 };
 
@@ -626,7 +623,7 @@ sgGo = function (target) { newPurchase = false; return originalSection(target); 
 go = function (target) {
   newPurchase = false;
   purchaseReturn = null;
-  if (target === "galeria" || target === "facturas" || target === "cargas" || target === "pales") {
+  if (target === "galeria" || target === "facturas" || target === "pales") {
     page = target;
     editing = null;
     $("content").innerHTML = target === "galeria" ? operations.galleryView() : window.sgExtra(target);

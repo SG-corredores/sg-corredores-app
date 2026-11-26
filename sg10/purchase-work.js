@@ -437,9 +437,77 @@
     }
   }
 
-  function reception() {
+  function loads(day, purchases) {
+    const orders = records.orders.filter(row => d(row).date === day && !cancelled.has(d(row).status));
+    const purchasesByOrder = new Map();
+    for (const purchase of purchases) {
+      const orderId = d(purchase).orderId;
+      if (!purchasesByOrder.has(orderId)) purchasesByOrder.set(orderId, []);
+      purchasesByOrder.get(orderId).push(purchase);
+    }
+    const shown = new Set();
+    const lines = [];
+    for (const order of orders) {
+      const customer = d(order).clientId;
+      const linked = (purchasesByOrder.get(order.id) || []).filter(purchase => d(purchase).clientId === customer);
+      for (const purchase of linked) {
+        lines.push({ row: purchase, purchase: true });
+        shown.add(purchase.id);
+      }
+      const key = unit(order) === "pales" ? "sgBoughtPallets" : "boxes";
+      const matching = linked.filter(purchase => unit(purchase) === unit(order) && Number(d(purchase)[key]) > 0);
+      const allocated = matching.reduce((total, purchase) => total + Number(d(purchase)[key]), 0);
+      const outstanding = Math.round((Number(d(order).boxes) - allocated) * 1000) / 1000;
+      if (!linked.length || (matching.length === linked.length && outstanding > 0)) lines.push({ row: order, outstanding });
+    }
+    for (const purchase of purchases) if (!shown.has(purchase.id)) lines.push({ row: purchase, purchase: true });
+
+    const visibleClients = records.clients.filter(row => lines.some(line => d(line.row).clientId === row.id));
+    const client = visibleClients.some(row => row.id === sgNavClient) ? sgNavClient : "";
+    const customerOptions = '<option value="">Todos los clientes</option>' + visibleClients.map(row =>
+      '<option value="' + esc(row.id) + '"' + (row.id === client ? " selected" : "") + ">" + esc(name(row.id)) + "</option>").join("");
+    const rows = lines.filter(line => !client || d(line.row).clientId === client);
+    const kg = purchases.filter(row => !client || d(row).clientId === client)
+      .reduce((total, row) => total + kilos(d(row)), 0);
+    return '<section class="card" id="sgReception" data-loads data-client="' + esc(client) + '"><h2>Cargas</h2>'
+      + '<div class="sg-reception-filters"><button type="button" data-reception-step="-1" aria-label="Cliente anterior">‹</button>'
+      + '<select aria-label="Cliente" id="sg10LoadCompany">' + customerOptions + '</select>'
+      + '<button type="button" data-reception-step="1" aria-label="Cliente siguiente">›</button>'
+      + '<input type="date" aria-label="Fecha de carga" id="sg10LoadDate" value="' + esc(day) + '"></div>'
+      + '<p class="muted">Kilos registrados en la fecha: <strong>' + esc(qty(kg)) + ' kg</strong></p>'
+      + '<details><summary>Más opciones</summary><div class="sg10-tools">'
+      + '<button type="button" onclick="sg10PrintLoad()">Imprimir hoja A4</button>'
+      + '<button type="button" onclick="sgGo(\'pales\')">Palets por cliente</button>'
+      + '<button type="button" onclick="sg10Ops(\'camera\')">Recuento con cámara</button></div></details>'
+      + (rows.length ? '<table><thead><tr><th scope="col">Producto</th><th scope="col">Puesto</th><th scope="col">Recepción</th></tr></thead><tbody>'
+        + rows.map(line => loadRow(line, !client)).join("") + '</tbody></table>'
+        : '<p>Sin mercancía para esta selección.</p>') + '</section>';
+  }
+
+  function loadRow({ row, purchase, outstanding }, showClient) {
+    const x = d(row);
+    const product = productName(row) || "Producto";
+    const amount = purchase ? Number(x.boxes) : outstanding;
+    const pallets = purchase && unit(row) === "pales";
+    let quantity = amount > 0 ? amountLabel(row, amount) : "";
+    if (pallets && Number(x.sgBoughtPallets) > 0) quantity = amountLabel(row, Number(x.sgBoughtPallets));
+    else if (pallets && amount > 0) quantity = qty(amount) + " " + sgUnitLabel({ quantityUnit: "cajas" }, amount);
+    const received = purchase && Boolean(x.receivedAt);
+    const label = received ? "Recepción confirmada de " : "Confirmar recepción de ";
+    const control = purchase
+      ? '<button type="button" data-receipt="' + esc(row.id) + '" aria-label="' + esc(label + product) + '"'
+        + (received ? ' class="secondary" disabled>✓ OK' : ' class="primary">OK') + '</button>'
+      : '<small>Pendiente</small>';
+    return '<tr class="' + (received ? "done" : "pending") + '"><td><span class="sg-load-cell">'
+      + (showClient ? '<small>' + esc(clientName(row)) + '</small>' : '')
+      + '<b>' + esc([quantity, product].filter(Boolean).join(" ")) + '</b></span></td><td><span class="sg-load-cell">'
+      + esc(x.supplier || "—") + '</span></td><td>' + control + '</td></tr>';
+  }
+
+  function reception(showLoads = false) {
     const day = sgClientDate();
     const purchases = records.purchases.filter(row => d(row).date === day && !cancelled.has(d(row).status));
+    if (showLoads) return loads(day, purchases);
     const visibleClients = records.clients.filter(row => purchases.some(purchase => d(purchase).clientId === row.id));
     const client = visibleClients.some(row => row.id === sgNavClient) ? sgNavClient : visibleClients[0]?.id || "";
     const clientOptions = visibleClients.map(row => '<option value="' + esc(row.id) + '"' + (row.id === client ? " selected" : "") + ">" + esc(d(row).name) + "</option>").join("");
@@ -459,14 +527,15 @@
   function decorateReception() {
     const panel = $("sgReception");
     if (!panel) return;
-    const picker = $("sgReceptionClient");
+    const picker = $("sgReceptionClient") || $("sg10LoadCompany");
+    const datePicker = $("sgReceptionDate") || $("sg10LoadDate");
     const clients = [...picker.options].map(option => option.value);
     const step = direction => {
       if (clients.length < 2) return;
       sgNavClient = clients[(clients.indexOf(panel.dataset.client) + direction + clients.length) % clients.length];
       render();
     };
-    $("sgReceptionDate").onchange = event => { if (event.target.value) { sgNavDate = event.target.value; render(); } };
+    datePicker.onchange = event => { if (event.target.value) { sgNavDate = event.target.value; render(); } };
     picker.onchange = () => { sgNavClient = picker.value; render(); };
     for (const button of panel.querySelectorAll("[data-reception-step]")) {
       button.disabled = clients.length < 2;
@@ -498,7 +567,7 @@
           await sync(true);
           toast("La línea ya se confirmó o cambió en otro dispositivo.");
         }
-        if (page === "recepcion") render();
+        if (page === "recepcion" || page === "cargas") render();
       } catch (error) { button.disabled = false; toast(err(error)); }
     };
   }
@@ -711,7 +780,7 @@
     connect();
     if (page !== "micompra") {
       const result = baseRender.apply(this,args);
-      if (page === "recepcion") decorateReception();
+      if (page === "recepcion" || page === "cargas") decorateReception();
       return result;
     }
     if ($("app").style.display === "none") return;

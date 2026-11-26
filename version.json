@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.14",
+  "version": "10.0.0-rc.15",
   "news": [
+    "Cargas muestra producto, cantidad y puesto, con confirmación de recepción por compra.",
     "La columna de comprador aparece solo en Resumen de pedidos.",
     "Repartir palets por puestos y precios desde el mismo pedido.",
     "Resumen de pedidos con compradores editables. Cada pedido sale del resumen al completar precio y puesto.",

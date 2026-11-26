@@ -202,3 +202,27 @@
   padding: 3px 4px;
   font-size: .8rem;
 }
+
+#sgReception[data-loads] { padding: .65rem; }
+#sgReception[data-loads] summary { cursor: pointer; color: #20583a; font-weight: 700; }
+#sgReception[data-loads] table { margin-top: .4rem; border-collapse: separate; border-spacing: 0 2px; }
+#sgReception[data-loads] th, #sgReception[data-loads] td { padding: 2px; border: 0; }
+#sgReception[data-loads] th:first-child { width: 50%; }
+#sgReception[data-loads] th:last-child { width: 22%; }
+#sgReception[data-loads] td:last-child { text-align: center; }
+#sgReception[data-loads] .sg-load-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
+  padding: .3rem;
+  border: 1px solid #c9d5cc;
+  border-radius: 5px;
+  font-weight: 700;
+}
+#sgReception[data-loads] small { display: block; font-size: .75rem; }
+#sgReception[data-loads] .sg-load-cell small { font-weight: 400; }
+#sgReception[data-loads] .pending .sg-load-cell { background: #fff8eb; }
+#sgReception[data-loads] .done .sg-load-cell { background: #e4f5e8; }
+#sgReception[data-loads] [data-receipt] { min-width: 44px; min-height: 44px; white-space: nowrap; }
+#sgReception[data-loads] th:last-child { font-size: .78rem; }
