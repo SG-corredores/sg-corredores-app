@@ -1,13 +1,13 @@
-import { createOrderVoice } from "./order-voice.js";
+import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.10";
 
-export const version = "10.0.0-rc.9";
+export const version = "10.0.0-rc.10";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",
 };
 const vapidKey = "BI2tLf6uDRRincuxMX_YAucWgSziV2i90ZsVzcHX7QLGQwAy_PauEn1lof_HIddrg0k0DIn0r3tUk5bxRY_Fswo";
 export const names = {
-  nuevo_pedido: "Nuevo pedido", nuevo_articulo: "Artículo añadido", articulo_comprado: "Artículo comprado",
+  pedido_cliente: "Pedido de cliente", mensaje_cliente: "Mensaje de cliente", nuevo_pedido: "Nuevo pedido", nuevo_articulo: "Artículo añadido", articulo_comprado: "Artículo comprado",
   precio: "Cambio de precio", puesto: "Cambio de puesto", pedido_modificado: "Pedido modificado",
   pedido_eliminado: "Pedido eliminado", mercancia_cargada: "Mercancía cargada", factura_recibida: "Factura recibida",
   factura_discrepancia: "Diferencia en factura", factura_sin_pedido: "Factura sin pedido", incidencia: "Reclamación o incidencia", comision_revision: "Comisión para revisión",
@@ -85,40 +85,47 @@ export async function detachPush(api, user) {
   await subscription.unsubscribe();
 }
 
-export function attachInbox({ api, space, user, button, panel, onOpen, onChange, portal }) {
+export function attachInbox({ api, space, user, button, panel, onOpen, onChange, onNew, portal }) {
   const voice = portal ? null : createOrderVoice(space,user);
   let eventRows = [];
   let readThrough = 0;
   let unreadCount = 0;
+  let latestEvent;
   let muted = [];
   let active = true;
   let expanded = false;
   function draw() {
     button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
     if (!expanded) return;
-    panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>Activar push</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
+    panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>Activar avisos en este dispositivo</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
       + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos de pedidos por voz</label>' : '')
       + '<details><summary>Preferencias de avisos push</summary>' + Object.entries(names).map(([kind,label]) =>
         '<label class="sg10-check"><input type="checkbox" data-kind="' + kind + '"' + (muted.includes(kind) ? '' : ' checked') + '> ' + esc(label) + '</label>').join('') + '</details>'
       + '<p data-message role="status"></p><ul class="sg10-notices">'
       + eventRows.map(row => '<li><button data-id="' + row.id + '"><strong>' + esc(names[row.kind] ?? row.kind) + '</strong> '
-        + esc([row.client_name,row.article,row.actor_name].filter(Boolean).join(" · ")) + '<small>'
+        + esc([row.client_name,row.kind === "mensaje_cliente" ? String(row.article).slice(0,100) : row.article,row.actor_name].filter(Boolean).join(" · ")) + '<small>'
         + esc(new Date(row.created_at).toLocaleString("es-ES",{ timeZone:"Europe/Madrid" })) + '</small></button></li>').join('')
       + (eventRows.length ? '' : '<li>No hay avisos.</li>') + '</ul>';
   }
+  const fromInbox = () => api.from("sg10_events");
   async function refresh() {
     const [events, preferences] = await Promise.all([
-      api.from("sg10_events").select("id,kind,client_name,article,actor_name,target,record_id,client_id,created_at").eq("workspace_id",space)
+      fromInbox().select("id,kind,client_name,article,actor_name,target,record_id,client_id,created_at").eq("workspace_id",space).eq("visible_to_clients", Boolean(portal))
         .order("id",{ascending:false}).limit(100),
       api.from("sg10_notice_settings").select("muted,read_through").eq("workspace_id",space).eq("user_id",user).maybeSingle(),
     ]);
     if (!active) return;
     if (events.error || preferences.error) throw events.error ?? preferences.error;
     eventRows = events.data;
+    const previous = latestEvent;
+    latestEvent = Math.max(previous ?? 0, Number(eventRows[0]?.id) || 0);
+    if (previous !== undefined && !document.hidden) {
+      for (const event of [...eventRows].reverse()) if (Number(event.id) > previous) onNew?.(event);
+    }
     voice?.update(eventRows);
     muted = preferences.data?.muted ?? [];
     readThrough = preferences.data?.read_through ?? 0;
-    const unread = await api.from("sg10_events").select("id",{count:"exact",head:true}).eq("workspace_id",space).gt("id",readThrough);
+    const unread = await fromInbox().select("id",{count:"exact",head:true}).eq("workspace_id",space).eq("visible_to_clients", Boolean(portal)).gt("id",readThrough);
     if (!active) return;
     if (unread.error) throw unread.error;
     unreadCount = unread.count ?? 0;
@@ -183,8 +190,8 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     if (!id) return;
     let row = eventRows.find(event => event.id === id);
     if (!row) {
-      const result = await api.from("sg10_events").select("id,kind,client_name,article,actor_name,target,record_id,client_id,created_at")
-        .eq("workspace_id",space).eq("id",id).maybeSingle();
+      const result = await fromInbox().select("id,kind,client_name,article,actor_name,target,record_id,client_id,created_at")
+        .eq("workspace_id",space).eq("visible_to_clients", Boolean(portal)).eq("id",id).maybeSingle();
       row = result.data;
     }
     if (active && row) onOpen(row);

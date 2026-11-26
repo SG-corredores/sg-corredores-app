@@ -1,6 +1,6 @@
 import { installAguacatin } from "./portal-aguacatin.js?v=foco";
 import { installCarousel } from "./portal-carousel.js";
-import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=palets";
+import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=10.0.0-rc.10";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };
@@ -27,6 +27,11 @@ function goToSection(id) {
 const refreshCarousel = installCarousel(element("gallery-list"),element("gallery-track"),element("gallery-items"),element("gallery-motion"));
 const params = new URLSearchParams(location.search);
 const previewMode = params.has("vista") || params.has("empresa");
+if (previewMode) {
+  element("contact-tile").hidden = true;
+  element("contact-form").remove();
+  if (location.hash === "#contacto") goToSection("inicio");
+}
 const previewMembership = previewMode ? {client_id:params.get("vista"),workspace_id:params.get("empresa")} : null;
 const directToken = previewMode ? null : directInviteToken();
 const invitation = previewMode || directToken ? null : openInvitation("portal");
@@ -392,6 +397,32 @@ async function connect() {
   }
   await openCompany(0);
 }
+let contactDraft;
+if (!previewMode) element("contact-form").onsubmit = async event => {
+  event.preventDefault();
+  const account = selected();
+  const input = element("contact-message");
+  const output = element("contact-status");
+  const body = input.value.trim();
+  if (!account || !body || body.length > 800) { output.textContent = "Escribe un mensaje de hasta 800 caracteres."; return; }
+  const submit = event.submitter;
+  if (submit.disabled) return;
+  const signature = JSON.stringify([account.workspace,account.company,body]);
+  if (contactDraft?.signature !== signature) contactDraft = { signature, id: crypto.randomUUID() };
+  submit.disabled = true;
+  input.readOnly = true;
+  output.textContent = "Enviando…";
+  try {
+    const { error } = await api.rpc("sg10_submit_client_message", {
+      space:account.workspace, company:account.company, request:contactDraft.id, body,
+    });
+    if (error) throw error;
+    contactDraft = null;
+    input.value = "";
+    output.textContent = "Mensaje enviado a SG Corredores.";
+  } catch (error) { output.textContent = error.message; }
+  finally { submit.disabled = false; input.readOnly = false; }
+};
 element("spaces").onchange = ({target}) => openCompany(Number(target.value)).catch(error => status(error.message));
 element("login-form").onsubmit = async (event) => {
   event.preventDefault();

@@ -53,7 +53,7 @@ export function createOrderVoice(space, user) {
       if (previous === undefined || !canSpeak()) return;
 
       for (const row of [...rows].reverse()) {
-        if (Number(row.id) <= previous || row.kind !== "nuevo_pedido") continue;
+        if (Number(row.id) <= previous || !["nuevo_pedido","pedido_cliente"].includes(row.kind)) continue;
         const record = row.record_id ?? String(row.id);
         const order = batchOrder.test(record) ? record.slice(0,record.lastIndexOf(":")) : record;
         if (heard.has(order)) continue;

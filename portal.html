@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./sg10/ui.css">
   <link rel="stylesheet" href="./sg10/portal.css?v=aguacatin-cierre">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.89.0/dist/umd/supabase.js"></script>
-  <script type="module" src="./sg10/portal.js?v=palets"></script>
+  <script type="module" src="./sg10/portal.js?v=10.0.0-rc.10"></script>
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="SG Clientes"><link rel="apple-touch-icon" href="./icon-192.png"></head>
 <body>
 <header>
@@ -70,6 +70,7 @@
         <a class="portal-tile" href="#facturas"><span aria-hidden="true">🧾</span><strong>Facturas</strong><small>Facturas de tu empresa</small></a>
         <a class="portal-tile" href="#assistant-section"><span aria-hidden="true">🔍</span><strong>Consultar producto</strong><small>Preguntar a Aguacatín</small></a>
         <a class="portal-tile" href="#comisiones"><span aria-hidden="true">📊</span><strong>Comisiones</strong><small>Liquidaciones publicadas</small></a>
+        <a class="portal-tile" id="contact-tile" href="#contacto"><span aria-hidden="true">✉️</span><strong>Mensaje a SG</strong><small>Enviar una consulta o incidencia</small></a>
         <a class="portal-tile" href="#history"><span aria-hidden="true">📋</span><strong>Historial</strong><small>Pedidos, compras y cargas</small></a>
       </nav>
     </div>
@@ -87,6 +88,14 @@
         <div id="lines"></div>
         <button type="submit">Confirmar y guardar</button>
         <p id="order-status" role="status"></p>
+      </form>
+    </section>
+    <section class="panel" id="contacto" data-portal-section hidden>
+      <h2>Mensaje a SG Corredores</h2>
+      <form id="contact-form">
+        <label>Mensaje<textarea id="contact-message" rows="5" maxlength="800" required placeholder="Escribe tu consulta o incidencia"></textarea></label>
+        <button type="submit">Enviar mensaje</button>
+        <p id="contact-status" role="status" aria-live="polite"></p>
       </form>
     </section>
     <section class="panel" id="history" data-portal-section hidden>

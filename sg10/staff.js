@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.9";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.10";
 import { installWalkie } from "./walkie.js?v=supabase";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -183,7 +183,17 @@ const operations = installOperations({
 
 const walkie=installWalkie({connection:()=>({api,workspace,user}),dialog:operations.dialog});
 
-function goToNotice(row) {
+async function goToNotice(row) {
+  if (row.kind === "mensaje_cliente") {
+    const dialog = operations.dialog("Mensaje de " + (row.client_name || "cliente"));
+    const text = document.createElement("p");
+    text.style.whiteSpace = "pre-wrap";
+    text.style.overflowWrap = "anywhere";
+    text.textContent = row.article || "";
+    dialog.querySelector("[data-content]").append(text);
+    return;
+  }
+  if (row.kind === "pedido_cliente" && !get("orders",row.record_id)) await sync(true);
   const targets = { pedidos:"orders", compras:"purchases" };
   if (!["pedidos","compras","facturas","comisiones","galeria"].includes(row.target)) return go("ajustes");
   const collection = targets[row.target];
@@ -221,7 +231,12 @@ function connectScope() {
   orderDraft = null;
   walkie.showShortcut(Boolean(key));
   if (!key) { walkie.close(); return; }
-  inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice});
+  inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice,
+    onNew: event => {
+      if (event.kind === "pedido_cliente") toast("Pedido nuevo · " + (event.client_name || "Cliente"));
+      if (event.kind === "mensaje_cliente") toast("Mensaje nuevo · " + (event.client_name || "Cliente"));
+    },
+  });
   liveApi = api;
   liveChannel = api.channel("sg10-staff-" + crypto.randomUUID());
   for (const table of ["sg_orders","sg_purchases","sg_clients","sg_pallets"]) {
