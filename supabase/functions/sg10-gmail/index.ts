@@ -71,7 +71,11 @@ Deno.serve(async request => {
     const profile = await gmail("/profile");
     if (String(profile.emailAddress).toLowerCase() !== inbox.toLowerCase()) return Response.json({error:"Buzón inesperado."},{status:403});
     if (checkOnly) return Response.json({ready:true});
-    const { originalsOnly }=await request.json().catch(()=>({}));
+    const { originalsOnly, messageIds }=await request.json().catch(()=>({}));
+    if (messageIds!==undefined && (!Array.isArray(messageIds)||messageIds.length<1||messageIds.length>3
+      || !messageIds.every(id=>typeof id==="string"&&/^[a-f0-9]{10,32}$/i.test(id)))) {
+      return Response.json({error:"Identificadores de Gmail no válidos."},{status:400});
+    }
     if (originalsOnly === true){
       const {data,error}=await api.rpc("sg10_missing_invoice_pdfs",{p_workspace:workspace,p_limit:4});
       if(error)throw error;
@@ -105,7 +109,7 @@ Deno.serve(async request => {
     const query=new URLSearchParams({q:lookback,maxResults:"3"});
     if (cursor.data?.page_token) query.set("pageToken",cursor.data.page_token);
     const newest=new URLSearchParams({q:lookback,maxResults:"3"});
-    const [page, head]=await Promise.all([
+    const [page, head]=messageIds ? [{messages:messageIds.map((id:string)=>({id}))},null] : await Promise.all([
       gmail("/messages?"+query).catch(error=>{
         if (!query.has("pageToken") || !(error instanceof Error) || error.message!=="Gmail HTTP 400") throw error;
         query.delete("pageToken");
@@ -122,7 +126,8 @@ Deno.serve(async request => {
     const recent=headIds.find(id=>!processed.has(id)&&!pageIds.includes(id));
     const pendingIds=pageIds.filter(id=>!processed.has(id));
     const batch=recent ? [recent,...pendingIds.slice(0,2)] : pendingIds;
-    const nextPage=pendingIds.some(id=>!batch.includes(id)) ? (query.get("pageToken")??null) : (page.nextPageToken??null);
+    const nextPage=messageIds ? cursor.data.page_token
+      : pendingIds.some(id=>!batch.includes(id)) ? (query.get("pageToken")??null) : (page.nextPageToken??null);
     async function markPdf(messageId:string, partId:string, receivedDay:string|null, reason:"retry"|"pdf") {
       const {error}=await api.from("sg10_gmail_pending").upsert({workspace_id:workspace,message_id:messageId,
         part_id:partId,received_day:receivedDay,reason,updated_at:new Date().toISOString()});
