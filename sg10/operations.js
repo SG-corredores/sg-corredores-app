@@ -56,73 +56,16 @@ function invoiceKey(doc) {
   return supplier && invoice && todayMatch(doc.fecha) ? supplier + "|" + doc.fecha.slice(0,4) + "|" + invoice : null;
 }
 
-function findCompany(doc, clients) {
-  const name = normalized(doc.cliente);
-  const code = normalized(doc.cif_cliente).replace(/ /g,"");
-  const same = clients.filter(({data}) => (code && code === normalized(data.cif || data.nif).replace(/ /g,""))
-    || (name && name === normalized(data.name)));
-  return same.length === 1 ? same[0].id : null;
-}
-
-const activeInvoiceReference = ({data}) => !["Cancelado","Anulado"].includes(data.status);
-const invoiceNumber = value => /^-?\d+(?:\.\d+)?$/.test(String(value ?? "")) ? Number(value) : NaN;
-function invoicePriceUnit(value) {
-  const unit = normalized(value);
-  if (/\b(?:kg|kilo|kilos)\b/.test(unit)) return "kg";
-  if (/\b(?:caja|cajas)\b/.test(unit)) return "caja";
-  if (/\b(?:pale|pales|palet|palets)\b/.test(unit)) return "pale";
-  return "";
-}
-
-function compareInvoice(invoice, purchases, orders) {
-  const doc = invoice.invoice_data;
-  if (doc.tipo === "abono" || !doc.client_id || !todayMatch(doc.fecha)) return [];
-  const forCustomerDay = row => activeInvoiceReference(row) && row.data.clientId === doc.client_id && row.data.date === doc.fecha;
-  const ordered = orders.filter(forCustomerDay);
-  if (!ordered.length) return ["No hay pedido de ese cliente para la fecha de la factura."];
-
-  const bought = purchases.filter(forCustomerDay);
-  const provider = normalized(doc.proveedor);
-  const findings = new Set();
-  for (const line of Array.isArray(doc.lineas) ? doc.lineas : []) {
-    const product = canonicalProduct(line?.producto);
-    if (!product) continue;
-    const orderLines = ordered.filter(row => canonicalProduct(row.data.product) === product);
-    if (!orderLines.length) {
-      findings.add(line.producto + " · No figura en el pedido.");
-      continue;
-    }
-    const price = invoiceNumber(line.precio);
-    if (!number(price)) continue;
-    const orderIds = new Set(orderLines.map(row => row.id));
-    const samePurchase = bought.filter(({data}) => (orderIds.has(data.orderId) || canonicalProduct(data.product) === product)
-      && (!provider || normalized(data.supplier) === provider));
-    const reference = samePurchase.length ? samePurchase : orderLines.filter(({data}) =>
-      !provider || !normalized(data.supplier) || normalized(data.supplier) === provider);
-    const unit = invoicePriceUnit(line.unidad_precio ?? line.priceUnit);
-    const prices = reference.map(({data}) => ({
-      value: data.priceCents != null ? invoiceNumber(data.priceCents)/100 : invoiceNumber(data.price),
-      unit: invoicePriceUnit(data.priceUnit) || "kg",
-    })).filter(entry => number(entry.value) && (!unit || entry.unit === unit));
-    if (!prices.length || (!unit && new Set(prices.map(entry => entry.unit)).size > 1)) continue;
-    if (prices.every(entry => Math.abs(price-entry.value) >= 0.0001)) {
-      const expected = [...new Set(prices.map(entry => formatting.format(entry.value)))].join(" / ");
-      findings.add(line.producto + " · Precio distinto (factura " + formatting.format(price) + " · registrado " + expected + ").");
-    }
-  }
-  return [...findings];
-}
-
 export function installOperations({ connection, refresh, date, formatPallets }) {
   let galleryRows = [];
   let invoiceRows = [];
-  let invoicePage = null;
+  let reviewMap = new Map();
+  let invoiceDay = "";
   let invoiceOwner = "";
   let target = "";
-  let fetching = false;
+  let fetchingPanel;
   let importing = false;
   let invoiceError = "";
-  let commissionKey = "";
   const state = connection;
   const roleOwner = () => state().role === "owner" && !state().user?.is_anonymous;
   const scope = () => (state().workspace ?? "") + ":" + (state().user?.id ?? "");
@@ -355,82 +298,82 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
   }
 
   function invoiceView() {
-    return '<div class="card"><h2>Facturas de Gmail</h2><div class="sg10-tools">'
-      + (roleOwner() ? '<button onclick="sg10Ops(\'importInvoices\',this)">Leer siguiente lote de Gmail</button>' : '')
-      + '<button onclick="sg10Ops(\'loadInvoices\')">Actualizar historial</button></div><p id="sg10InvoiceStatus" role="status">'
-      + esc(invoiceError) + '</p><div id="sg10InvoiceBalances"></div><div id="sg10InvoiceList"></div></div>';
+    return '<div class="card"><h2>Revisar facturas</h2><div class="sg10-tools">'
+      + '<label>Fecha de factura<input type="date" id="sg10InvoiceDate" value="' + esc(invoiceDay) + '" onchange="sg10Ops(\'invoiceDate\',this.value)"></label>'
+      + (roleOwner() ? '<button onclick="sg10Ops(\'importInvoices\',this)">Buscar nuevas facturas en Gmail</button>' : '')
+      + '<button onclick="sg10Ops(\'loadInvoices\')">Actualizar</button></div><p id="sg10InvoiceStatus" role="status">'
+      + esc(invoiceError || "Se muestran las incidencias verificadas de los últimos 30 días. Elige una fecha para consultar otro día.")
+      + '</p><div id="sg10InvoiceBalances"></div><div id="sg10InvoiceList"></div></div>';
   }
   async function loadInvoices() {
     const context=scope();
-    if (invoiceOwner!==context) { invoiceOwner=context; invoiceRows=[]; invoicePage=null; invoiceError=""; }
-    const {api,workspace,records}=state();
-    const [documents,balances]=await Promise.all([
-      api.from("sg_invoices").select("*").eq("workspace_id",workspace).order("created_at",{ascending:false}).limit(250),
+    if (invoiceOwner!==context) { invoiceOwner=context; invoiceRows=[]; reviewMap=new Map(); }
+    const {api,workspace}=state();
+    const selected=invoiceDay;
+    const fallback=new Date(today()+"T00:00:00Z");
+    fallback.setUTCDate(fallback.getUTCDate()-29);
+    const panel=document.getElementById("sg10InvoiceList");
+    const [incidents,recent,balances]=await Promise.all([
+      api.rpc("sg10_invoice_findings",{space:workspace,from_day:selected||fallback.toISOString().slice(0,10),to_day:selected||today()}),
+      api.from("sg_invoices").select("*").eq("workspace_id",workspace).order("created_at",{ascending:false}).limit(100),
       api.from("sg10_invoice_balances").select("id,invoice_number,customer_name,day,gross,credit,net").eq("workspace_id",workspace)
         .gt("credit",0).order("day",{ascending:false}).limit(50),
     ]);
-    if (context!==scope()) return;
-    if (documents.error || balances.error) throw documents.error ?? balances.error;
-    invoiceRows=documents.data;
+    if (context!==scope()||selected!==invoiceDay||!panel?.isConnected) return;
+    if (incidents.error || recent.error || balances.error) throw incidents.error ?? recent.error ?? balances.error;
+    const rows=new Map(recent.data.map(row=>[row.id,row]));
+    const extra=[...incidents.data.map(row=>row.id),target].filter(id=>id&&!rows.has(id));
+    for (let offset=0;offset<extra.length;offset+=50) {
+      const {data,error}=await api.from("sg_invoices").select("*").eq("workspace_id",workspace).in("id",extra.slice(offset,offset+50));
+      if(error)throw error;
+      for(const row of data) rows.set(row.id,row);
+    }
+    if (context!==scope()||selected!==invoiceDay||!panel.isConnected) return;
+    invoiceRows=[...rows.values()].sort((a,b)=>String(b.invoice_data.fecha).localeCompare(String(a.invoice_data.fecha)));
+    reviewMap=new Map(incidents.data.map(row=>[row.id,row.findings]));
     const summary=document.getElementById("sg10InvoiceBalances");
     if(summary)summary.innerHTML=balances.data.length?'<h3>Facturas con abonos descontados</h3>'+balances.data.map(row=>
       '<p>'+esc(row.customer_name)+' · '+esc(row.invoice_number)+' · '+esc(formatting.format(row.gross))
       +' − '+esc(formatting.format(row.credit))+' = <strong>'+esc(formatting.format(row.net))+'</strong></p>').join(""):"";
-    const list=document.getElementById("sg10InvoiceList");
-    if (!list) return;
     const pending = [];
     const history = [];
     for (const row of invoiceRows) {
-      const findings=compareInvoice(row,records.purchases,records.orders);
+      const findings=reviewMap.get(row.id)??[];
       const x=row.invoice_data;
-      const needsReview = findings.length > 0 && !row.approved_at;
+      const needsReview = findings.length>0;
       const label = row.approved_at ? "Aprobada" : needsReview ? "Pendiente de revisión" : "En historial";
       const markup = '<div class="item" data-invoice="' + esc(row.id) + '"><b>' + (x.tipo==="abono" ? "Abono · " : "")+esc(row.invoice_number || "Sin número")
         + '</b> · ' + esc(row.customer_name || "Cliente por identificar") + '<p>' + esc(x.fecha) + ' · ' + esc(x.proveedor)
         + ' · ' + esc(label) + '</p><p>' + esc(x.total==null ? "Sin importe" : formatting.format(x.total))
         + '</p>' + (findings.length ? '<ul>' + findings.map(item=>'<li>'+esc(item)+'</li>').join("")+'</ul>' : '')
-        + '<button onclick="sg10Ops(\'reviewInvoice\',this.closest(\'[data-invoice]\').dataset.invoice)">Ver'
+        + '<button onclick="sg10Ops(\'reviewInvoice\',this.closest(\'[data-invoice]\').dataset.invoice)">Ver PDF'
         + (needsReview && roleOwner() ? ' y revisar' : '') + '</button></div>';
       (needsReview ? pending : history).push(markup);
     }
-    list.innerHTML = '<h3>Facturas para revisar</h3>'
-      + (pending.length ? pending.join("") : "<p>No hay facturas para revisar.</p>")
-      + (history.length ? '<details><summary>Historial de facturas ('+history.length+')</summary>'+history.join("")+'</details>' : "");
-    const open=target&&list.querySelector('[data-invoice="'+CSS.escape(target)+'"]');
+    panel.innerHTML = '<h3>Incidencias verificadas</h3>'
+      + (pending.length ? pending.join("") : "<p>Sin incidencias verificadas para este periodo.</p>")
+      + (history.length ? '<details><summary>Historial reciente</summary>'+history.join("")+'</details>' : "");
+    const open=target&&panel.querySelector('[data-invoice="'+CSS.escape(target)+'"]');
     if(open) { const section=open.closest("details"); if(section)section.open=true; open.classList.add("sg10-highlight");open.scrollIntoView({block:"center"});target=""; }
+  }
+
+  async function setInvoiceDate(value) {
+    invoiceDay=value;
+    await loadInvoices();
   }
 
   async function importInvoices(button) {
     if (!roleOwner() || importing) return;
     importing=true;
     button.disabled=true;
-    const context=scope();
     const feedback=document.getElementById("sg10InvoiceStatus");
-    const {api,workspace,records}=state();
-    feedback.textContent="Leyendo y extrayendo el siguiente lote de Gmail…";
+    const {api,workspace}=state();
+    feedback.textContent="Solicitando sincronización…";
     try {
-      const response=await invoke(api,"sg-gmail-facturas",{pageToken:invoicePage});
-      if (context!==scope()) return;
-      let inserted=0, duplicates=0;
-      const errors=[];
-      for(const item of response.documentos??[]) {
-        if(!/^[a-f0-9]{64}$/.test(item.hash)||!item.documento||typeof item.documento!=="object") continue;
-        const doc=item.documento;
-        if(!["factura","abono"].includes(doc.tipo)) continue;
-        const {error}=await api.from("sg_invoices").insert({workspace_id:workspace,invoice_number:doc.numero||null,customer_name:doc.cliente||"",
-          invoice_data:{...doc,archivo:String(item.archivo??"").slice(0,180),client_id:findCompany(doc,records.clients),visible_cliente:false},
-          sg10_pdf_hash:item.hash,sg10_fiscal_key:invoiceKey(doc)});
-        if(error?.code==="23505") duplicates++;
-        else if(error) errors.push(error.message);
-        else inserted++;
-      }
-      if(!errors.length) invoicePage=response.siguiente??null;
-      const extraction=(response.errores??[]).map(item=>String(item.archivo??"")+" "+String(item.error??"")).slice(0,5);
-      invoiceError=inserted+" guardadas · "+duplicates+" duplicadas"+(invoicePage ? " · Quedan correos por revisar." : "")
-        + (errors.length+extraction.length ? " · "+[...errors,...extraction].join(" · ") : "");
-      feedback.textContent=invoiceError;
-      await loadInvoices();
-    }catch(error){feedback.textContent=invoiceError=error.message;}
+      const {error}=await api.rpc("sg10_request_gmail_sync",{space:workspace});
+      if(error)throw error;
+      feedback.textContent="Sincronización solicitada. Los documentos aparecerán al terminar la importación.";
+    }catch(error){feedback.textContent=error.message;}
     finally{importing=false;button.disabled=false;}
   }
 
@@ -507,7 +450,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     const field = box.querySelector("textarea");
     field.value = row.invoice_data.observaciones ?? "";
     field.readOnly = !editable;
-    const findings = compareInvoice(row, state().records.purchases, state().records.orders);
+    const findings = reviewMap.get(row.id) ?? [];
     if (findings.length) {
       const list = document.createElement("ul");
       for (const finding of findings) {
@@ -565,7 +508,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       + '<label>CIF del asentador <input name="tax" value="'+esc(x.cif_proveedor)+'"></label>'
       + '<label>Importe <input name="total" inputmode="decimal" value="'+esc(x.total)+'"></label></div>'
       + lines.map(line=>'<fieldset><label>Producto <input name="product" value="'+esc(line.producto)+'"></label>'
-        + '<div class="grid"><label>Bultos <input name="boxes" inputmode="decimal" value="'+esc(line.cajas)+'"></label>'
+        + '<div class="grid"><label>Bultos <input name="boxes" inputmode="decimal" value="'+esc(line.bultos??line.cajas)+'"></label>'
         + '<label>Kilos <input name="kg" inputmode="decimal" value="'+esc(line.kilos_netos)+'"></label>'
         + '<label>Precio <input name="price" inputmode="decimal" value="'+esc(line.precio)+'"></label></div></fieldset>').join("")
       + (editable?'<label class="sg10-check"><input type="checkbox" name="visible"'+(x.visible_cliente?" checked":"")+'> Publicar para la empresa al aprobar</label>'
@@ -605,7 +548,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         total=decimal(value("total"));
         edited=[...form.querySelectorAll("fieldset")].map((field,index)=>{
           const get=(name)=>field.querySelector('[name="'+name+'"]').value;
-          return {...lines[index],producto:get("product").trim(),cajas:decimal(get("boxes")),kilos_netos:decimal(get("kg")),precio:decimal(get("price"))};
+          return {...lines[index],producto:get("product").trim(),bultos:decimal(get("boxes")),cajas:decimal(get("boxes")),kilos_netos:decimal(get("kg")),precio:decimal(get("price"))};
         });
       }catch(error){return feedback.textContent=error.message;}
       const company=state().records.clients.find(c=>c.id===value("company"));
@@ -616,7 +559,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         return feedback.textContent="Antes de aprobar verifica empresa, número, fecha, CIF, importe y líneas.";
       const originalId=form.elements.original?.value||null;
       if(approve&&doc.tipo==="abono"&&!originalId)return feedback.textContent="Selecciona primero la factura original.";
-      const findings=compareInvoice({...row,sg10_original_id:originalId,invoice_data:doc},state().records.purchases,state().records.orders);
+      const findings=reviewMap.get(row.id)??[];
       if(approve&&!confirm((findings.length ? findings.join("\n")+"\n\n":"")+"¿Confirmas la aprobación tras revisar los datos?"))return;
       const fields={invoice_number:doc.numero||null,customer_name:doc.cliente||"",sg10_fiscal_key:invoiceKey(doc),
         invoice_data:{...doc,visible_cliente:approve&&form.elements.visible.checked},original_id:originalId,
@@ -635,7 +578,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
 
   function settingsView() {
     return '<div class="card"><h2>Zona Clientes</h2><div class="sg10-tools"><button onclick="go(\'galeria\')">Gestionar fotografías</button>'
-      + (roleOwner()?'<button onclick="sg10Ops(\'previewClients\')">Ver Zona Clientes</button><button onclick="sg10Ops(\'clients\')">Gestionar accesos por empresa</button><button onclick="sg10Ops(\'rules\')">Tarifas y pesos fijos</button>':'')
+      + (roleOwner()?'<button onclick="sg10Ops(\'previewClients\')">Ver Zona Clientes</button><button onclick="sg10Ops(\'clients\')">Gestionar accesos por empresa</button><button onclick="sg10Ops(\'rules\')">Tarifas, pesos e identificación fiscal</button>':'')
       + '</div></div>';
   }
 
@@ -742,10 +685,11 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
   function ruleForm() {
     if(!roleOwner())return;
     const {records}=state();
-    const dialog=openDialog("Tarifas y pesos fijos por producto");
+    const dialog=openDialog("Tarifas, pesos e identificación fiscal");
     const content=dialog.querySelector("[data-content]");
     content.innerHTML='<form><label>Cliente <select name="company" required><option value="">Seleccionar</option>'+renderOptions(records.clients)
-      + '</select></label><div data-rules></div><button type="button" data-add>Añadir regla</button> <button>Guardar reglas</button><p role="status"></p></form>';
+      + '</select></label><label>CIF/NIF <input name="tax" maxlength="24"></label>'
+      + '<label>Otros nombres en las facturas (uno por línea)<textarea name="aliases" rows="3" maxlength="1000"></textarea></label><div data-rules></div><button type="button" data-add>Añadir regla</button> <button>Guardar reglas</button><p role="status"></p></form>';
     const form=content.querySelector("form");
     const rules=form.querySelector("[data-rules]");
     const feedback=form.querySelector("[role=status]");
@@ -763,6 +707,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       rules.replaceChildren();feedback.textContent="";
       const row=records.clients.find(row=>row.id===form.elements.company.value);
       stamp=row?.updated_at;
+      form.elements.tax.value=row?.data.cif??row?.data.nif??"";
+      form.elements.aliases.value=(row?.data.invoiceAliases??[]).join("\n");
       (row?.data.sg10Rules??[]).forEach(add);
     };
     form.onsubmit=async event=>{
@@ -771,6 +717,8 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
       const id=form.elements.company.value;
       const row=records.clients.find(row=>row.id===id);
       if(!row||!stamp)return;
+      const tax=form.elements.tax.value.trim();
+      const aliases=[...new Set(form.elements.aliases.value.split("\n").map(value=>value.trim()).filter(Boolean))];
       const list=[...rules.querySelectorAll("fieldset")].map(field=>{
         const get=(key)=>field.querySelector('[name="'+key+'"]').value.trim();
         return {product:get("product"),rate:get("rate")?validNumber(get("rate")):null,weight:get("weight")?validNumber(get("weight")):null};
@@ -780,7 +728,7 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         return feedback.textContent="Revisa los valores y deja una sola regla por producto.";
       event.submitter.disabled=true;
       try{
-        const {data,error}=await api.from("sg_clients").update({data:{...row.data,sg10Rules:list}}).eq("workspace_id",workspace).eq("id",id)
+        const {data,error}=await api.from("sg_clients").update({data:{...row.data,cif:tax,invoiceAliases:aliases,sg10Rules:list}}).eq("workspace_id",workspace).eq("id",id)
           .eq("updated_at",stamp).select("id,data,updated_at");
         if(error||!data?.length)throw error??Error("El cliente cambió. Vuelve a abrirlo.");
         Object.assign(row,data[0]);stamp=row.updated_at;
@@ -913,34 +861,18 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
     iva.after(button);
   }
 
-  function range(kind) {
-    const day=date();
-    const start=new Date(day+"T12:00:00Z");
-    if(kind==="week")start.setUTCDate(start.getUTCDate()-(start.getUTCDay()+6)%7);
-    if(kind==="month")start.setUTCDate(1);
-    sgComDate=start.toISOString().slice(0,10);
-    window.sgComEnd=day;
-    refresh();
-  }
-  function commissionView({client,start,end}) {
-    commissionKey=JSON.stringify([client,start,end]);
-    return '<div class="card"><h2>Revisión de comisiones</h2><div class="sg10-tools"><button onclick="sg10Ops(\'range\',\'day\')">Diario</button>'
-      + '<button onclick="sg10Ops(\'range\',\'week\')">Semanal</button><button onclick="sg10Ops(\'range\',\'month\')">Mensual</button></div>'
-      + (client ? '<div id="sg10CommissionStatus" role="status">Consultando estado…</div>' : '<p>Selecciona un cliente para revisar su informe.</p>')+'</div>';
-  }
-  async function commissionStatus() {
-    const panel=document.getElementById("sg10CommissionStatus");
-    if(!panel)return;
-    const key=commissionKey,[client,start,end]=JSON.parse(key);
-    const {api,workspace,records}=state();
-    const loaded=records.purchases.filter(row=>row.data.clientId===client&&row.data.date>=start&&row.data.date<=end&&row.data.status==="Cargado");
-    const source=loaded.map(row=>[row.id,row.updated_at]).sort((a,b)=>a[0].localeCompare(b[0]));
-    if(!source.length){panel.textContent="No hay cargas confirmadas para revisar.";return;}
-    const basis=records.clients.find(row=>row.id===client)?.data.sg10Rules??[];
-    const fingerprint=await digest(JSON.stringify([basis,source]));
+  async function commissionStatus(container, group, range, existingPanel) {
+    const {api,workspace}=state();
+    const {id:client,lines}=group;
+    const {start,end}=range;
+    const panel=existingPanel??document.createElement("div");
+    panel.setAttribute("role","status");
+    if(!existingPanel)container.append(panel);
+    panel.textContent="Consultando revisión de la liquidación…";
+    const fingerprint=await digest(JSON.stringify([group.kg,group.commission,lines]));
     const {data,error}=await api.from("sg10_commission_reviews").select("status,fingerprint,updated_at").eq("workspace_id",workspace)
       .eq("client_id",client).eq("date_from",start).eq("date_to",end).maybeSingle();
-    if(commissionKey!==key||!panel.isConnected)return;
+    if(!panel.isConnected)return;
     if(error){panel.textContent=error.message;return;}
     const status=data?.fingerprint===fingerprint?data.status:"pendiente";
     panel.textContent="Estado: "+status+(data&&data.fingerprint!==fingerprint?" · El informe cambió desde la última revisión.":"");
@@ -952,15 +884,15 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
         if(next==="enviada"&&!confirm("¿Publicar los kilos y la comisión de este periodo en la Zona Clientes de esta empresa?"))return;
         button.disabled=true;
         const row={workspace_id:workspace,client_id:client,date_from:start,date_to:end,fingerprint,status:next,
-          published_kg:next==="enviada"?loaded.reduce((total,row)=>total+kilos(row.data),0):null,
-          published_total:next==="enviada"?loaded.reduce((total,row)=>total+commission(row.data),0):null,
+          published_kg:next==="enviada"?group.kg:null,
+          published_total:next==="enviada"?group.commission:null,
           updated_by:state().user.id,updated_at:new Date().toISOString()};
         const result=data
           ? await api.from("sg10_commission_reviews").update(row).eq("workspace_id",workspace).eq("client_id",client)
             .eq("date_from",start).eq("date_to",end).eq("updated_at",data.updated_at).select("status")
           : await api.from("sg10_commission_reviews").insert(row).select("status");
         if(result.error||!result.data?.length){panel.textContent=result.error?.message??"El estado cambió. Vuelve a abrir el informe.";return;}
-        await commissionStatus();
+        await commissionStatus(container,group,range,panel);
       };
       panel.append(" ",button);
     }
@@ -968,13 +900,16 @@ export function installOperations({ connection, refresh, date, formatPallets }) 
 
   function afterRender(page) {
     if(page==="galeria")loadGallery().catch(error=>toast(error.message));
-    if(page==="facturas"&&!fetching){
-      fetching=true;
-      loadInvoices().catch(error=>{const box=document.getElementById("sg10InvoiceStatus");if(box)box.textContent=error.message;}).finally(()=>fetching=false);
+    if(page==="facturas"){
+      const panel=document.getElementById("sg10InvoiceStatus");
+      if(panel&&fetchingPanel!==panel){
+        fetchingPanel=panel;
+        loadInvoices().catch(error=>{if(panel.isConnected)panel.textContent=error.message;})
+          .finally(()=>{if(fetchingPanel===panel)fetchingPanel=null;});
+      }
     }
-    if(page==="comisiones")commissionStatus().catch(error=>toast(error.message));
   }
-  const actions={editPhoto:photoForm,removePhoto,camera:cameraForm,loadInvoices,importInvoices,reviewInvoice,clients:clientForm,previewClients,rules:ruleForm,range,splitPurchase};
+  const actions={editPhoto:photoForm,removePhoto,camera:cameraForm,loadInvoices,invoiceDate:setInvoiceDate,importInvoices,reviewInvoice,clients:clientForm,previewClients,rules:ruleForm,splitPurchase};
   window.sg10Ops=(action,...args)=>Promise.resolve().then(()=>actions[action]?.(...args)).catch(error=>toast(error.message));
-  return {dialog:openDialog,splitPalletsRemaining,previewClients,settingsView,invoiceView,galleryView,commissionView,configureRate,decoratePurchase,afterRender,setTarget};
+  return {dialog:openDialog,splitPalletsRemaining,previewClients,settingsView,invoiceView,galleryView,commissionStatus,configureRate,decoratePurchase,afterRender,setTarget};
 }

@@ -1,6 +1,7 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.23";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.24";
 import { installWalkie } from "./walkie.js?v=2";
-import { installOperations } from "./operations.js?v=10.0.0-rc.17";
+import { installOperations } from "./operations.js?v=10.0.0-rc.24";
+import { installCommissions } from "./commissions.js?v=10.0.0-rc.24";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;
@@ -602,12 +603,15 @@ window.sg10ApplyRelease = async (button) => {
 
 const builtInRate = rate;
 rate = (client,product) => operations.configureRate(client,product) ?? builtInRate(client,product);
-const originalCommissions = commissions;
-commissions = () => originalCommissions() + operations.commissionView({
-  client:sgComClient === null ? sgSelectedClient() : sgComClient,
-  start:sgComDate || sgClientDate(),
-  end:window.sgComEnd || sgComDate || sgClientDate(),
+const dailyCommissions = installCommissions({
+  connection: () => ({api,workspace,user,role}),
+  today,
+  selected: () => sgComClient,
+  changeSelection: client => { sgComClient = client; },
+  redraw: () => render(),
+  portalControls: operations.commissionStatus,
 });
+commissions = dailyCommissions.view;
 const originalRender = render;
 render = function (...args) {
   const result = originalRender.apply(this,args);
@@ -616,6 +620,7 @@ render = function (...args) {
   simpleOrderForm();
   updateNav();
   operations.afterRender(page);
+  if (page === "comisiones") void dailyCommissions.load();
   return result;
 };
 const originalGo = go;
@@ -630,6 +635,7 @@ go = function (target) {
     $("content").innerHTML = target === "galeria" ? operations.galleryView() : window.sgExtra(target);
     updateNav();
     operations.afterRender(page);
+  if (page === "comisiones") void dailyCommissions.load();
     return;
   }
   return originalGo(target);
