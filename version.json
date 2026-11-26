@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.20",
+  "version": "10.0.0-rc.21",
   "news": [
+    "Al imprimir todos los clientes, cada cliente empieza en una hoja nueva.",
     "Resumen incluye acceso directo a los pedidos sin asignar para elegir comprador.",
     "Cada comprador tiene su lista y el administrador puede marcar otros nombres o ver las líneas sin asignar.",
     "Dicta pedidos desde Pedidos y añade compradores por nombre desde el resumen, sin PIN.",

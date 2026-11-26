@@ -133,7 +133,7 @@
   #sg-work-print th, #sg-work-print td { border: .2mm solid #888; padding: .75mm; text-align: left; overflow-wrap: anywhere; }
   #sg-work-print td { height: 8mm; }
   #sg-work-print tr { break-inside: avoid; }
-  #sg-work-print .sg-work-print-heading th, #sg-work-print .sg-work-print-group td { font-weight: 700; border-top: .45mm solid #444; }
+  #sg-work-print .sg-work-print-group td { font-weight: 700; border-top: .45mm solid #444; }
 }
 
 #sgReception { touch-action: pan-y; }

@@ -730,13 +730,14 @@
     const groups = new Map();
     for (const row of ordersOn(day, client)) {
       if (summary && !summaryVisible(row)) continue;
-      const company = clientName(row);
-      if (!groups.has(company)) groups.set(company, []);
-      groups.get(company).push(printLine(row, Number(d(row).boxes) || 0));
+      const clientId = d(row).clientId;
+      if (!groups.has(clientId)) groups.set(clientId, { company: clientName(row), lines: [] });
+      groups.get(clientId).lines.push(printLine(row, Number(d(row).boxes) || 0));
     }
-    const lines = [...groups].sort(([a], [b]) => a.localeCompare(b, "es"))
-      .flatMap(([company, rows]) => [{ heading: company }, ...rows]);
-    return printSheet((summary ? "Resumen de pedidos · " : "Pedidos · ") + (client ? name(client) : "Todos los clientes"), day, lines);
+    const heading = summary ? "Resumen de pedidos · " : "Pedidos · ";
+    const documents = [...groups.values()].sort((a,b) => a.company.localeCompare(b.company,"es"))
+      .map(({company,lines}) => ({title:heading+company,lines}));
+    return printSheet(day, documents);
   }
   function printList(day, assignee, filter, compact) {
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
@@ -749,29 +750,21 @@
         supplier: same("supplier"), buyers: groupMemberIds(group).filter(Boolean).map(person).join(" · "), subtotal: true,
       }, ...child];
     }) : rows.map(row => printLine(row, remaining(row), clientName(row) + " · ", true));
-    return printSheet(assignee ? "Compra · " + person(assignee) : "Compra general", day, lines);
+    const title = assignee ? "Compra · " + person(assignee) : "Compra general";
+    return printSheet(day, lines.length ? [{title,lines}] : []);
   }
-  function printSheet(title, day, lines) {
-    if (!lines.length) { toast("No hay mercancía para imprimir."); return false; }
-    let place = $("sg-work-print");
-    if (!place) {
-      place = document.createElement("main");
-      place.id = "sg-work-print";
-      document.body.append(place);
-    }
+  function printPages({title,lines}, day) {
     const columns = [];
     let current = [];
-    let previousHeader = "";
     let weight = 0;
-    for (const [index, item] of lines.entries()) {
-      const cost = item.heading ? 1 : Math.max(1, Math.ceil(item.product.length / 25), Math.ceil(item.buyers.length / 17),
+    for (const item of lines) {
+      const cost = Math.max(1, Math.ceil(item.product.length / 25), Math.ceil(item.buyers.length / 17),
         Math.ceil(item.price.length / 14), Math.ceil(item.supplier.length / 13));
-      if (current.length && (weight + cost > 19 || (item.heading && weight + cost === 19 && lines[index + 1]))) {
+      if (current.length && weight + cost > 19) {
         columns.push(current);
-        current = item.heading || !previousHeader ? [] : [{ heading: previousHeader + " (cont.)" }];
-        weight = current.length;
+        current = [];
+        weight = 0;
       }
-      if (item.heading) previousHeader = item.heading;
       current.push(item);
       weight += cost;
     }
@@ -779,14 +772,23 @@
     const renderColumn = column => column ? `<section><h2>${esc(title)}</h2><p>${esc(day)}</p><table>
       <colgroup><col style="width:17mm"><col style="width:49mm"><col style="width:19mm"><col style="width:23mm"><col style="width:22mm"></colgroup>
       <thead><tr><th>Cant.</th><th>Mercancía</th><th>Precio</th><th>Puesto</th><th>Empleado</th></tr></thead>
-      <tbody>${column.map(item => item.heading ? '<tr class="sg-work-print-heading"><th colspan="5">' + esc(item.heading) + "</th></tr>"
-        : '<tr' + (item.subtotal ? ' class="sg-work-print-group"' : "") + ">" + ["quantity","product","price","supplier","buyers"]
+      <tbody>${column.map(item => '<tr' + (item.subtotal ? ' class="sg-work-print-group"' : "") + ">" + ["quantity","product","price","supplier","buyers"]
         .map(field => "<td>" + esc(item[field]) + "</td>").join("") + "</tr>").join("")}</tbody></table></section>` : "<section></section>";
     let html = "";
     for (let index = 0; index < columns.length; index += 2) {
       html += "<article>" + renderColumn(columns[index]) + renderColumn(columns[index + 1]) + "</article>";
     }
-    place.innerHTML = html;
+    return html;
+  }
+  function printSheet(day, documents) {
+    if (!documents.length) { toast("No hay mercancía para imprimir."); return false; }
+    let place = $("sg-work-print");
+    if (!place) {
+      place = document.createElement("main");
+      place.id = "sg-work-print";
+      document.body.append(place);
+    }
+    place.innerHTML = documents.map(entry => printPages(entry,day)).join("");
     document.body.classList.add("sg-work-print-active");
     window.print();
     return true;
