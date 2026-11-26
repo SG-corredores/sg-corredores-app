@@ -760,7 +760,7 @@
     for (const item of lines) {
       const cost = Math.max(1, Math.ceil(item.product.length / 25), Math.ceil(item.buyers.length / 17),
         Math.ceil(item.price.length / 14), Math.ceil(item.supplier.length / 13));
-      if (current.length && weight + cost > 19) {
+      if (current.length && weight + cost > 17) {
         columns.push(current);
         current = [];
         weight = 0;
@@ -776,7 +776,7 @@
         .map(field => "<td>" + esc(item[field]) + "</td>").join("") + "</tr>").join("")}</tbody></table></section>` : "<section></section>";
     let html = "";
     for (let index = 0; index < columns.length; index += 2) {
-      html += "<article>" + renderColumn(columns[index]) + renderColumn(columns[index + 1]) + "</article>";
+      html += '<article><div class="sg-work-print-columns">' + renderColumn(columns[index]) + renderColumn(columns[index + 1]) + "</div></article>";
     }
     return html;
   }

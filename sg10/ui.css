@@ -124,13 +124,13 @@
   @page { size: A4 landscape; margin: 8mm 13.5mm; }
   body.sg-work-print-active > :not(#sg-work-print) { display: none !important; }
   body.sg-work-print-active { background: white !important; color: black; overflow: visible !important; }
-  body.sg-work-print-active #sg-work-print { display: block; width: 270mm; max-width: none; margin: 0; padding: 0; font: 9pt Arial, sans-serif; }
-  #sg-work-print article { display: grid; grid-template-columns: 130mm 130mm; gap: 10mm; break-after: page; }
-  #sg-work-print article:last-child { break-after: auto; }
+  body.sg-work-print-active #sg-work-print { display: block; width: 270mm; max-width: none; margin: 0; padding: 0; font: 11pt/1.1 Arial, sans-serif; }
+  #sg-work-print > article + article { page-break-before: always; break-before: page; }
+  #sg-work-print .sg-work-print-columns { display: grid; grid-template-columns: 130mm 130mm; gap: 10mm; }
   #sg-work-print h2, #sg-work-print p { margin: 0 0 1mm; text-align: center; color: black; }
-  #sg-work-print h2 { font-size: 13pt; }
+  #sg-work-print h2 { font-size: 15pt; }
   #sg-work-print table { width: 130mm; table-layout: fixed; border-collapse: collapse; }
-  #sg-work-print th, #sg-work-print td { border: .2mm solid #888; padding: .75mm; text-align: left; overflow-wrap: anywhere; }
+  #sg-work-print th, #sg-work-print td { border: .2mm solid #888; padding: .55mm; text-align: left; overflow-wrap: anywhere; }
   #sg-work-print td { height: 8mm; }
   #sg-work-print tr { break-inside: avoid; }
   #sg-work-print .sg-work-print-group td { font-weight: 700; border-top: .45mm solid #444; }
