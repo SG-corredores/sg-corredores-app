@@ -1,6 +1,6 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.13";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.14";
 import { installWalkie } from "./walkie.js?v=supabase";
-import { installOperations } from "./operations.js?v=10.0.0-rc.13";
+import { installOperations } from "./operations.js?v=10.0.0-rc.14";
 
 window.sg10PalletText = formatPallets;
 window.sg10ReadPallets = readPallets;

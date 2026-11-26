@@ -393,16 +393,10 @@
     header.append(panel.querySelector(".sg-work-actions"));
   }
 
-  function decorateOrders() {
-    const sheet = $("dailySheet");
-    if (!sheet) return;
-    const table = sheet.querySelector("table");
-    const heading = table?.querySelector("thead tr");
-    if (!heading) return;
-    const summary = page === "resumenpedidos";
+  function decorateSummaryAssignments(sheet, table, heading) {
     if (!heading.querySelector(".sg-work-heading")) {
       const th = document.createElement("th");
-      th.textContent = summary ? "Comprador" : "Responsable";
+      th.textContent = "Comprador";
       th.className = "sg-work-heading";
       heading.prepend(th);
     }
@@ -414,14 +408,24 @@
       if (!row) continue;
       const td = tr.querySelector(".sg-work-order-cell") || tr.insertCell(0);
       td.className = "sg-work-order-cell";
-      td.innerHTML = (summary ? check(row) : "") + badge(currentAssignee(id));
-      if (summary && (remaining(row) || currentAssignee(id)) && canEdit(id)) ids.push(id);
+      td.innerHTML = check(row) + badge(currentAssignee(id));
+      if ((remaining(row) || currentAssignee(id)) && canEdit(id)) ids.push(id);
     }
     sheet.querySelector(".sg-work-actions")?.remove();
     if (ids.length) {
       actions(sheet, () => ids);
       table.before(sheet.querySelector(".sg-work-actions"));
     }
+  }
+
+  function decorateOrders() {
+    const sheet = $("dailySheet");
+    if (!sheet) return;
+    const table = sheet.querySelector("table");
+    const heading = table?.querySelector("thead tr");
+    if (!heading) return;
+    const summary = page === "resumenpedidos";
+    if (summary) decorateSummaryAssignments(sheet, table, heading);
     if (!sheet.querySelector("[data-print-orders]")) {
       const section = document.createElement("div");
       section.className = "actions";
