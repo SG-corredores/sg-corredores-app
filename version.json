@@ -1,6 +1,7 @@
 {
-  "version": "10.0.0-rc.19",
+  "version": "10.0.0-rc.20",
   "news": [
+    "Resumen incluye acceso directo a los pedidos sin asignar para elegir comprador.",
     "Cada comprador tiene su lista y el administrador puede marcar otros nombres o ver las líneas sin asignar.",
     "Dicta pedidos desde Pedidos y añade compradores por nombre desde el resumen, sin PIN.",
     "Solo se marcan para revisión las facturas con precio distinto o mercancía que no figura en el pedido.",

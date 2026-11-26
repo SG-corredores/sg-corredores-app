@@ -48,6 +48,7 @@
   let loading;
   let assignmentBusy = false;
   let buyerChecks = null;
+  let assignmentQueue = false;
   let productFilter = "";
   let grouped = true;
   let live;
@@ -68,6 +69,13 @@
     const key = buyerKey(currentAssignee(orderId));
     if (role !== "owner" || !buyerChecks) return key === ownBuyer();
     return buyerChecks.has(key);
+  }
+  const inAssignmentQueue = () => assignmentQueue && role === "owner" && page === "resumenpedidos";
+  const needsBuyer = row => !currentAssignee(row.id) && remaining(row) > 0;
+  function summaryVisible(row) {
+    if (!loaded) return false;
+    if (inAssignmentQueue()) return needsBuyer(row);
+    return workVisible(row.id) && window.sg10OrderNeedsPriceOrSupplier(row);
   }
   function colour(uid) {
     const index = [...new Set([...members.keys(),...buyers.keys()])].sort().indexOf(uid);
@@ -150,6 +158,7 @@
     buyers.clear();
     buyerByAccount.clear();
     buyerChecks = null;
+    assignmentQueue = false;
     assignments.clear();
     selected.clear();
     opened.clear();
@@ -514,6 +523,33 @@
     }
   }
 
+  function decorateAssignmentQueue(sheet) {
+    sheet.querySelector(".sg-work-assign-queue")?.remove();
+    if (role !== "owner") return;
+    const toolbar = document.createElement("div");
+    toolbar.className = "sg-work-assign-queue actions";
+    const button = document.createElement("button");
+    const open = inAssignmentQueue();
+    const count = loaded ? ordersOn(sgClientDate()).filter(needsBuyer).length : null;
+    button.type = "button";
+    button.className = open ? "secondary" : "primary";
+    button.textContent = open ? "Volver a mi vista" : "Asignar comprador" + (count === null ? "" : " · " + count + " sin asignar");
+    button.disabled = !loaded;
+    button.onclick = () => {
+      assignmentQueue = !open;
+      render();
+      $("dailySheet")?.querySelector(".sg-work-assign-queue button")?.focus({preventScroll:true});
+    };
+    toolbar.append(button);
+    if (open && count) {
+      const instructions = document.createElement("span");
+      instructions.className = "muted";
+      instructions.textContent = "Marca las líneas y elige un comprador.";
+      toolbar.append(instructions);
+    }
+    sheet.querySelector("h2").after(toolbar);
+  }
+
   function decorateOrders() {
     const sheet = $("dailySheet");
     if (!sheet) return;
@@ -522,8 +558,9 @@
     if (!heading) return;
     const summary = page === "resumenpedidos";
     if (summary) {
+      decorateAssignmentQueue(sheet);
       sheet.querySelector(".sg-work-buyer-filter")?.remove();
-      table.before(buyerFilter());
+      if (!inAssignmentQueue()) table.before(buyerFilter());
       decorateSummaryAssignments(sheet, table, heading);
     }
     if (!sheet.querySelector("[data-print-orders]")) {
@@ -692,7 +729,7 @@
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
     const groups = new Map();
     for (const row of ordersOn(day, client)) {
-      if (summary && (!workVisible(row.id) || !window.sg10OrderNeedsPriceOrSupplier(row))) continue;
+      if (summary && !summaryVisible(row)) continue;
       const company = clientName(row);
       if (!groups.has(company)) groups.set(company, []);
       groups.get(company).push(printLine(row, Number(d(row).boxes) || 0));
@@ -857,7 +894,8 @@
     return false;
   }
 
-  window.sg10WorkVisible = workVisible;
+  window.sg10SummaryVisible = summaryVisible;
+  window.sg10AssignmentQueueActive = inAssignmentQueue;
   window.sg10Reception = reception;
   window.sg10CreateEmployeePin = createEmployeePin;
   window.sg10PendingQuantity = remaining;
@@ -875,6 +913,7 @@
   const baseRender = render;
   render = function (...args) {
     connect();
+    if (page !== "resumenpedidos") assignmentQueue = false;
     if (page !== "micompra") {
       const result = baseRender.apply(this,args);
       if (page === "recepcion" || page === "cargas") decorateReception();
