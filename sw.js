@@ -1,4 +1,4 @@
-const VERSION = "10.0.0-rc.24";
+const VERSION = "10.0.0-rc.25";
 const CACHE = "sg10-shell-" + VERSION;
 const base = self.registration.scope;
 const url = (path) => new URL(path,base).href;

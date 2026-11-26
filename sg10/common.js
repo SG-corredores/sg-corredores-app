@@ -1,6 +1,6 @@
 import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.14";
 
-export const version = "10.0.0-rc.24";
+export const version = "10.0.0-rc.25";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",

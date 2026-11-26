@@ -1,4 +1,4 @@
-import { esc } from "./common.js?v=10.0.0-rc.24";
+import { esc } from "./common.js?v=10.0.0-rc.25";
 
 const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 const price = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 4 });
@@ -21,6 +21,10 @@ const printCss = `
 .sg-liquidation .unconfirmed{background:#fff4d8;color:#493a11}
 .sg-liquidation .totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:12px}
 .sg-liquidation .status{font-weight:700}
+.sg-liquidation .coverage{margin-top:18px}
+.sg-liquidation .coverage summary{cursor:pointer;font-weight:700;color:#123b27}
+.sg-liquidation .coverage ul{padding-inline-start:20px}
+.sg-liquidation .coverage li{margin:5px 0;break-inside:avoid}
 @media print{
   @page{size:A4 portrait;margin:10mm}
   body{margin:0}
@@ -36,6 +40,33 @@ const row = (cells, css = "") => '<tr class="' + css + '">' + cells.map(value =>
 const sum = (rows, key) => rows.reduce((total, entry) => total + Number(entry[key] ?? 0), 0);
 const incomplete = group => Number(group.pending_invoices) + Number(group.pending_orders) + Number(group.pending_purchases) > 0;
 
+const orderUnit = { cajas: "cajas", kg: "kg", pales: "palets", capas: "capas", sacos: "sacos", unidades: "unidades" };
+const documentLabel = document => [document.kind === "abono" ? "Abono" : "Factura",
+  document.number ? "n.º " + document.number : "sin número", document.document_client, document.supplier,
+  document.total == null ? "" : euro(document.total), document.line_count ? document.line_count + " líneas" : "sin líneas extraídas",
+  document.processed ? "Conciliada" : "Pendiente"].filter(Boolean).join(" · ");
+const operationLabel = item => [
+  [item.product, item.variety].filter(Boolean).join(" "),
+  item.quantity == null ? "" : amount(item.quantity) + " " + (orderUnit[item.unit] ?? item.unit ?? ""),
+  item.supplier, item.kg == null ? "" : amount(item.kg) + " kg", item.status,
+].filter(Boolean).join(" · ");
+function coverageList(label, entries, format) {
+  if (!entries?.length) return "";
+  return '<details class="coverage"><summary>' + esc(label) + ' (' + entries.length + ')</summary><ul>'
+    + entries.map(entry => "<li>" + esc(format(entry)) + "</li>").join("") + "</ul></details>";
+}
+function unassignedSheet(data, range) {
+  if (!data.unassigned_documents?.length) return "";
+  const docs = data.unassigned_documents.map(document => {
+    const lines = document.lines?.map(line => [line.item, line.variety, line.boxes == null ? "" : amount(line.boxes) + " bultos",
+      line.invoice_kg == null ? "" : amount(line.invoice_kg) + " kg facturados", line.gross == null ? "" : euro(line.gross)].filter(Boolean).join(" · ")) ?? [];
+    return "<li>" + esc(documentLabel(document))
+      + (lines.length ? "<ul>" + lines.map(line => "<li>" + esc(line) + "</li>").join("") + "</ul>" : "") + "</li>";
+  });
+  return '<section class="sg-liquidation"><h2>Facturas y abonos sin cliente identificado</h2><p>'
+    + esc(spanishDate(range.start)) + '</p><ul>' + docs.join("") + '</ul></section>';
+}
+
 function sheet(group, range, logo) {
   const suppliers = new Map();
   for (const line of group.lines) {
@@ -48,6 +79,7 @@ function sheet(group, range, logo) {
     for (const line of lines) {
       const product = [line.item, line.variety].filter(Boolean).join(" ");
       const description = [product, line.kind === "abono" ? "Abono" : "", line.commission == null ? "Pendiente" : "",
+        line.kg == null && line.invoice_kg != null ? amount(line.invoice_kg) + " kg facturados" : "",
         line.invoice_number ? "N.º " + line.invoice_number : "", range.start !== range.end ? spanishDate(line.day) : ""].filter(Boolean).join(" · ");
       const cost = line.price == null ? "—" : price.format(line.price) + " €" + (unit[line.unit] ? "/" + unit[line.unit] : "");
       details += row([amount(line.boxes), amount(line.tare), amount(line.kg), description, supplier, cost, euro(line.net), euro(line.gross), euro(line.commission)],
@@ -63,12 +95,16 @@ function sheet(group, range, logo) {
     group.pending_purchases ? group.pending_purchases + " compras sin conciliar" : ""].filter(Boolean);
   return '<section class="sg-liquidation"><header><img src="' + esc(logo) + '" alt="Serrano Gago"><div><b>SERRANO GAGO</b><h2>'
     + esc(group.name) + '</h2><b>' + dates + '</b></div></header><p class="status">'
-    + (incomplete(group) ? "Liquidación pendiente · totales parciales" : "Liquidación conciliada") + '</p>'
+    + (group.active === false ? "Sin actividad registrada" : incomplete(group) ? "Liquidación pendiente · totales parciales" : "Liquidación conciliada") + '</p>'
     + (reasons.length ? '<p>' + esc(reasons.join(" · ")) + '</p>' : "")
     + (details ? '<table><thead><tr>' + headings.map(label => "<th>" + esc(label) + "</th>").join("") + '</tr></thead><tbody>'
       + details + '</tbody></table>' : '<p>Sin facturas conciliadas para este cliente en el periodo.</p>')
     + '<div class="totals"><b>Kilos confirmados: ' + amount(group.kg) + '</b><b>Comisión confirmada: ' + euro(group.commission)
-    + '</b><b>Compras conciliadas: ' + euro(group.net) + '</b><b>Compras con IVA: ' + euro(group.gross) + '</b></div></section>';
+    + '</b><b>Compras conciliadas: ' + euro(group.net) + '</b><b>Compras con IVA: ' + euro(group.gross) + '</b></div>'
+    + coverageList("Facturas y abonos del cliente", group.documents, documentLabel)
+    + coverageList("Compras y recepciones del cliente", group.purchases, operationLabel)
+    + coverageList("Líneas de pedido del cliente", group.orders, operationLabel)
+    + '</section>';
 }
 
 function periodStart(day, kind) {
@@ -83,9 +119,14 @@ function periodStart(day, kind) {
 function printSheets(sections) {
   const preview = window.open("", "_blank");
   if (!preview) throw Error("Permite las ventanas emergentes para imprimir o guardar en PDF.");
+  const printContents = sections.map(section => {
+    const copy = section.cloneNode(true);
+    for (const detail of copy.querySelectorAll("details")) detail.open = true;
+    return copy.outerHTML;
+  }).join("");
   preview.document.open();
   preview.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>SG Corredores · Liquidaciones</title>'
-    + '<style>' + printCss + '</style></head><body>' + sections.map(section => section.outerHTML).join("") + '</body></html>');
+    + '<style>' + printCss + '</style></head><body>' + printContents + '</body></html>');
   preview.document.close();
   const print = () => { if (!preview.closed) { preview.focus(); preview.print(); } };
   if (preview.document.readyState === "complete") print();
@@ -146,6 +187,7 @@ export function installCommissions({ connection, today, selected, changeSelectio
       manual = result.error ? result.error.message : "Sincronización de Gmail solicitada. Los resultados aparecerán tras importar los adjuntos.";
       notice.textContent = manual;
       panel.querySelector("[data-gmail]").disabled = false;
+      if (!result.error) setTimeout(() => { if (panel.isConnected) redraw(); }, 12000);
     };
     try {
       const range = { start: first.value, end: last.value };
@@ -160,7 +202,7 @@ export function installCommissions({ connection, today, selected, changeSelectio
       const totals = [
         ["Comisión confirmada", euro(sum(groups,"commission"))], ["Kilos confirmados", amount(sum(groups,"kg"))],
         ["Compras conciliadas", euro(sum(groups,"net"))], ["Compras con IVA", euro(sum(groups,"gross"))],
-        ["Clientes", groups.length], ["Facturas procesadas", clientId ? sum(groups,"processed_invoices") : data.processed],
+        ["Clientes", groups.length], ["Con actividad", groups.filter(group => group.active !== false).length], ["Facturas procesadas", clientId ? sum(groups,"processed_invoices") : data.processed],
         ["Facturas pendientes", clientId ? sum(groups,"pending_invoices") : Number(data.pending) + Number(data.unread)],
         ["Liquidaciones pendientes", groups.filter(incomplete).length],
       ];
@@ -170,9 +212,11 @@ export function installCommissions({ connection, today, selected, changeSelectio
         data.unread ? data.unread + " adjuntos pendientes de lectura en el periodo" : "",
         data.undated ? data.undated + " documentos sin fecha verificable en el historial" : "",
       ].filter(Boolean).join(" · ");
+      const unidentified = unassignedSheet(data,range);
       output.innerHTML = '<div class="grid">' + totals.map(([label,value]) => '<div class="item"><b>' + label
         + '</b><div class="big">' + esc(value) + '</div></div>').join("") + '</div>'
         + (clients.length ? '<div class="actions"><button type="button" class="primary" data-print-all>Imprimir todos los clientes / PDF</button></div>' : "")
+        + (!clientId && unidentified ? '<article class="card">' + unidentified + '</article>' : "")
         + (groups.length ? groups.map(group => '<article class="card"><div style="overflow:auto">' + sheet(group,range,logo)
           + '</div><button type="button" data-print-one>Imprimir cliente / PDF</button></article>').join("") : '<p>Sin actividad conciliable en el periodo.</p>');
       const onPrint = sections => { try { printSheets(sections); } catch (error) { status.textContent = error.message; } };
@@ -180,10 +224,10 @@ export function installCommissions({ connection, today, selected, changeSelectio
         onPrint([button.closest("article").querySelector(".sg-liquidation")]);
       if (clients.length) output.querySelector("[data-print-all]").onclick = () => {
         const template = document.createElement("template");
-        template.innerHTML = clients.map(group => sheet(group,range,logo)).join("");
+        template.innerHTML = clients.map(group => sheet(group,range,logo)).join("") + unidentified;
         onPrint([...template.content.children]);
       };
-      if (clientId && groups.length === 1 && groups[0].id === clientId && !incomplete(groups[0])) {
+      if (clientId && groups.length === 1 && groups[0].id === clientId && groups[0].active !== false && !incomplete(groups[0])) {
         void portalControls(panel, groups[0], range).catch(error => { status.textContent = error.message; });
       }
     } catch (error) {
