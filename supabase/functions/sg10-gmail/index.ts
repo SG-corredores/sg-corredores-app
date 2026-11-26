@@ -108,14 +108,14 @@ Deno.serve(async request => {
     const lookback="newer_than:30d {filename:pdf subject:reclamación subject:incidencia subject:faltante subject:abono}";
     const query=new URLSearchParams({q:lookback,maxResults:"3"});
     if (cursor.data?.page_token) query.set("pageToken",cursor.data.page_token);
-    const newest=new URLSearchParams({q:lookback,maxResults:"3"});
+    const newest=new URLSearchParams({q:lookback.replace("newer_than:30d","newer_than:2d"),maxResults:"100"});
     const [page, head]=messageIds ? [{messages:messageIds.map((id:string)=>({id}))},null] : await Promise.all([
       gmail("/messages?"+query).catch(error=>{
         if (!query.has("pageToken") || !(error instanceof Error) || error.message!=="Gmail HTTP 400") throw error;
         query.delete("pageToken");
         return gmail("/messages?"+query);
       }),
-      cursor.data?.page_token ? gmail("/messages?"+newest) : Promise.resolve(null),
+      gmail("/messages?"+newest),
     ]);
     const pageIds: string[]=(page.messages??[]).map((row:{id:string})=>row.id);
     const headIds: string[]=(head?.messages??[]).map((row:{id:string})=>row.id);
@@ -123,11 +123,17 @@ Deno.serve(async request => {
     const known=ids.length ? await api.from("sg10_gmail_messages").select("message_id").eq("workspace_id",workspace).in("message_id",ids) : {data:[],error:null};
     if (known.error) throw known.error;
     const processed=new Set((known.data??[]).map(row=>row.message_id));
-    const recent=headIds.find(id=>!processed.has(id)&&!pageIds.includes(id));
     const pendingIds=pageIds.filter(id=>!processed.has(id));
-    const batch=recent ? [recent,...pendingIds.slice(0,2)] : pendingIds;
+    const recent=headIds.filter(id=>!processed.has(id));
+    const recentCandidates=recent.length ? await api.from("sg10_gmail_pending").select("message_id").eq("workspace_id",workspace)
+      .eq("reason","retry").gte("updated_at",new Date(Date.now()-10*60_000).toISOString()).in("message_id",recent) : {data:[],error:null};
+    if (recentCandidates.error) throw recentCandidates.error;
+    const coolingDown=new Set((recentCandidates.data??[]).map(row=>row.message_id));
+    const priority=recent.filter(id=>!coolingDown.has(id));
+    // Fill slots with current mail before advancing the historical cursor.
+    const batch=[...new Set([...priority,...pendingIds])].filter(id=>!coolingDown.has(id)).slice(0,3);
     const nextPage=messageIds ? cursor.data.page_token
-      : pendingIds.some(id=>!batch.includes(id)) ? (query.get("pageToken")??null) : (page.nextPageToken??null);
+      : pendingIds.some(id=>!batch.includes(id)&&!coolingDown.has(id)) ? (query.get("pageToken")??null) : (page.nextPageToken??null);
     async function markPdf(messageId:string, partId:string, receivedDay:string|null, reason:"retry"|"pdf") {
       const {error}=await api.from("sg10_gmail_pending").upsert({workspace_id:workspace,message_id:messageId,
         part_id:partId,received_day:receivedDay,reason,updated_at:new Date().toISOString()});
