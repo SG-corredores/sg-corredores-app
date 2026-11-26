@@ -87,7 +87,7 @@
   function refreshView() {
     if (page === "micompra") {
       if (!$("content").contains(document.activeElement) || !document.activeElement.matches("input:not([type=checkbox]),select,textarea")) draw();
-    } else if (page === "hoja") decorateOrders();
+    } else if (page === "hoja" || page === "resumenpedidos") decorateOrders();
   }
 
   function load() {
@@ -184,14 +184,19 @@
   function actions(root, ids) {
     const bar = document.createElement("div");
     bar.className = "sg-work-actions actions";
-    bar.innerHTML = '<label class="sg-work-select"><input type="checkbox" data-all> Seleccionar visibles</label>'
+    const summary = page === "resumenpedidos";
+    if (summary) bar.classList.add("sg-work-actions-grid");
+    bar.innerHTML = '<label class="sg-work-select"><input type="checkbox" data-all> Seleccionar todo</label>'
       + '<button type="button" class="secondary" data-self>Asignarme</button>'
-      + (role === "owner" ? '<select aria-label="Empleado responsable" data-employee>' + memberOptions(user.id)
+      + (role === "owner" ? '<select aria-label="' + (summary ? 'Comprador' : 'Empleado responsable') + '" data-employee>'
+        + (summary ? '<option value="">Elegir comprador</option>' : '') + memberOptions(summary ? '' : user.id)
         + '</select><button type="button" class="secondary" data-assign>Asignar</button>' : "")
       + '<button type="button" class="secondary" data-release>Retirar asignación</button><span data-count role="status"></span>';
     root.append(bar);
     const all = bar.querySelector("[data-all]");
     const controls = [...bar.querySelectorAll("button,select")];
+    const buyer = bar.querySelector("[data-employee]");
+    const assignButton = bar.querySelector("[data-assign]");
     const activeIds = () => [...new Set(ids())];
     function update() {
       const possible = activeIds();
@@ -200,6 +205,8 @@
       all.indeterminate = count > 0 && !all.checked;
       all.disabled = !loaded || !possible.length;
       controls.forEach(button => { button.disabled = !loaded || !count; });
+      if (assignButton && !buyer.value) assignButton.disabled = true;
+      if (summary) for (const control of controls) control.hidden = count === 0;
       bar.querySelector("[data-count]").textContent = count ? count + " seleccionadas" : "";
     }
     const checks = [...root.querySelectorAll("[data-work-check]")];
@@ -222,7 +229,10 @@
     };
     bar.querySelector("[data-self]").onclick = () => run(user.id);
     bar.querySelector("[data-release]").onclick = () => run(null);
-    if (role === "owner") bar.querySelector("[data-assign]").onclick = () => run(bar.querySelector("[data-employee]").value);
+    if (assignButton) {
+      buyer.onchange = update;
+      assignButton.onclick = () => { if (buyer.value) run(buyer.value); };
+    }
     update();
   }
 
@@ -263,16 +273,21 @@
     if (day) sgNavDate = day;
     go("micompra");
   }
-  function configureNames() {
+  function configureNames(buyers = false) {
     const dialog = document.createElement("dialog");
     dialog.className = "sg-work-team";
-    dialog.innerHTML = '<h2>Nombres de empleados</h2><form><label>Empleado<select name="employee">'
+    dialog.innerHTML = '<h2>' + (buyers ? 'Gestionar compradores' : 'Nombres de empleados')
+      + '</h2><form><label>' + (buyers ? 'Comprador' : 'Empleado') + '<select name="employee">'
       + memberOptions(user.id) + '</select></label><label>Nombre visible<input name="displayName" required maxlength="60"></label>'
-      + '<div class="actions"><button class="primary" type="submit">Guardar nombre</button><button type="button">Cerrar</button></div><p role="status"></p></form>';
+      + '<div class="actions"><button class="primary" type="submit">Guardar nombre</button><button type="button" data-close>Cerrar</button>'
+      + (buyers && !user.is_anonymous ? '<button type="button" data-new-buyer>Añadir comprador</button>' : '')
+      + '</div><p role="status"></p></form>';
     const form = dialog.querySelector("form");
     form.elements.employee.onchange = () => { form.elements.displayName.value = person(form.elements.employee.value); };
     form.elements.employee.onchange();
-    form.querySelector('button[type="button"]').onclick = () => dialog.close();
+    form.querySelector('[data-close]').onclick = () => dialog.close();
+    const add = form.querySelector('[data-new-buyer]');
+    if (add) add.onclick = () => { dialog.close(); createEmployeePin(true); };
     dialog.onclose = () => dialog.remove();
     const account = scope();
     form.onsubmit = async event => {
@@ -295,12 +310,13 @@
     dialog.showModal();
   }
 
-  function createEmployeePin() {
+  function createEmployeePin(buyer = false) {
     if (role !== "owner" || !scope() || user.is_anonymous) return;
     const account = scope();
     const dialog = document.createElement("dialog");
     dialog.className = "sg-work-team";
-    dialog.innerHTML = '<h2>Crear empleado con PIN</h2><form><label>Nombre del empleado<input name="name" required maxlength="60"></label>'
+    const title = buyer ? 'Comprador' : 'Empleado';
+    dialog.innerHTML = '<h2>Añadir ' + title.toLowerCase() + ' con PIN</h2><form><label>Nombre<input name="name" required maxlength="60"></label>'
       + '<div class="actions"><button class="primary" type="submit">Crear PIN</button><button type="button">Cerrar</button></div>'
       + '<p role="status" aria-live="polite"></p></form>';
     const form = dialog.querySelector("form");
@@ -364,7 +380,7 @@
     $("sgWorkFilter").onkeydown = event => { if (event.key === "Enter") { event.preventDefault(); event.target.blur(); } };
     $("sgWorkGroup").onclick = () => { grouped = !grouped; draw(); };
     $("sgWorkPrint").onclick = () => printList(day, selectedEmployee(), productFilter, grouped);
-    if ($("sgWorkNames")) $("sgWorkNames").onclick = configureNames;
+    if ($("sgWorkNames")) $("sgWorkNames").onclick = () => configureNames();
     if ($("sgWorkReload")) $("sgWorkReload").onclick = load;
     for (const details of panel.querySelectorAll("details")) details.ontoggle = () => {
       if (!details.isConnected) return;
@@ -383,9 +399,10 @@
     const table = sheet.querySelector("table");
     const heading = table?.querySelector("thead tr");
     if (!heading) return;
+    const summary = page === "resumenpedidos";
     if (!heading.querySelector(".sg-work-heading")) {
       const th = document.createElement("th");
-      th.textContent = "Responsable";
+      th.textContent = summary ? "Comprador" : "Responsable";
       th.className = "sg-work-heading";
       heading.prepend(th);
     }
@@ -397,8 +414,8 @@
       if (!row) continue;
       const td = tr.querySelector(".sg-work-order-cell") || tr.insertCell(0);
       td.className = "sg-work-order-cell";
-      td.innerHTML = check(row) + badge(currentAssignee(id));
-      if ((remaining(row) || currentAssignee(id)) && canEdit(id)) ids.push(id);
+      td.innerHTML = (summary ? check(row) : "") + badge(currentAssignee(id));
+      if (summary && (remaining(row) || currentAssignee(id)) && canEdit(id)) ids.push(id);
     }
     sheet.querySelector(".sg-work-actions")?.remove();
     if (ids.length) {
@@ -411,8 +428,8 @@
       section.innerHTML = '<button type="button" data-print-orders>Imprimir este cliente</button>'
         + '<button type="button" data-print-all>Imprimir todos los clientes</button>';
       table.after(section);
-      section.querySelector("[data-print-orders]").onclick = () => printOrders($("dailyClient").value, sgClientDate());
-      section.querySelector("[data-print-all]").onclick = () => printOrders("", sgClientDate());
+      section.querySelector("[data-print-orders]").onclick = () => printOrders($("dailyClient").value, sgClientDate(), summary);
+      section.querySelector("[data-print-all]").onclick = () => printOrders("", sgClientDate(), summary);
     }
   }
 
@@ -498,17 +515,18 @@
     return { quantity: amountLabel(row, amount), product: prefix + (details ? productName(row) : [productName(row), data.notes].filter(Boolean).join(" · ")),
       price: prices.join(" · "), supplier: suppliers.join(" · "), buyers: buyers.map(person).join(" · ") };
   }
-  function printOrders(client, day) {
+  function printOrders(client, day, summary = false) {
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
     const groups = new Map();
     for (const row of ordersOn(day, client)) {
+      if (summary && !window.sg10OrderNeedsPriceOrSupplier(row)) continue;
       const company = clientName(row);
       if (!groups.has(company)) groups.set(company, []);
       groups.get(company).push(printLine(row, Number(d(row).boxes) || 0));
     }
     const lines = [...groups].sort(([a], [b]) => a.localeCompare(b, "es"))
       .flatMap(([company, rows]) => [{ heading: company }, ...rows]);
-    return printSheet("Pedidos · " + (client ? name(client) : "Todos los clientes"), day, lines);
+    return printSheet((summary ? "Resumen de pedidos · " : "Pedidos · ") + (client ? name(client) : "Todos los clientes"), day, lines);
   }
   function printList(day, assignee, filter, compact) {
     if (!loaded) { toast("Sincroniza la lista de empleados para imprimir."); return false; }
@@ -670,24 +688,14 @@
   window.sg10CreateEmployeePin = createEmployeePin;
   window.sg10PendingQuantity = remaining;
   window.sg10DecorateOrderAssignments = decorateOrders;
-  window.sgPrint82 = () => printOrders($("dailyClient")?.value || sgSelectedClient(), sgClientDate());
+  window.sg10ManageBuyers = () => {
+    if (role !== "owner") return;
+    if (!loaded) return toast("Espera a que se sincronicen los compradores.");
+    configureNames(true);
+  };
+  window.sgPrint82 = () => printOrders($("dailyClient")?.value || sgSelectedClient(), sgClientDate(), page === "resumenpedidos");
   window.sg10WorkVoice = voice;
   window.sg10WorkDate = dateFrom;
-  window.sg10PersonalPurchaseButton = (id, container) => {
-    if (!container || !loaded || !canEdit(id) || !remaining(get("orders", id))) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    const current = currentAssignee(id);
-    if (current && current !== user.id) return;
-    button.textContent = current ? "Retirar de mi compra" : "Asignarme este pedido";
-    button.onclick = async () => {
-      try {
-        const changed = await assign([id], current ? null : user.id);
-        if (changed) { button.textContent = current ? "Asignarme este pedido" : "Retirar de mi compra"; button.disabled = true; toast("Asignación guardada."); }
-      } catch (error) { toast(err(error)); }
-    };
-    container.replaceChildren(button);
-  };
   const ask = window.askAgu;
   window.askAgu = async () => {
     const input = $("aguQuestion");

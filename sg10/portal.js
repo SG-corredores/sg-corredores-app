@@ -1,6 +1,6 @@
 import { installAguacatin } from "./portal-aguacatin.js?v=foco";
 import { installCarousel } from "./portal-carousel.js";
-import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=10.0.0-rc.11";
+import { openInvitation, directInviteToken, redeemDirectInvite, publicConfig, esc, madridDate, validNumber, isOrderRequest, orderUnits, orderUnitLabel, invoke, attachInbox, detachPush, version } from "./common.js?v=10.0.0-rc.12";
 
 const element = (id) => document.getElementById(id);
 const status = (message) => { element("status").textContent = message; };

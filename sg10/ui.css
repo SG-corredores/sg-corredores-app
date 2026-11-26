@@ -20,7 +20,7 @@
 #app>header .sg-brand{margin-right:auto}.sg-brand-logo{max-height:43px}.sg-brand h1{font-size:clamp(1rem,4.1vw,1.4rem)}
 #app>header>small,#app>header>#status{display:none}
 #app>header .sg10-inbox{flex:1 0 100%}#app>header>.sg10-bell{margin:0;min-height:44px}
-#app>#nav{width:100%;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible;gap:2px;padding:.25rem .25rem max(.25rem,env(safe-area-inset-bottom))}
+#app>#nav{width:100%;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));overflow:visible;gap:2px;padding:.25rem .25rem max(.25rem,env(safe-area-inset-bottom))}
 #app>#nav button{min-width:0;min-height:45px;font-size:clamp(.72rem,3vw,.95rem);padding:.35rem .1rem;white-space:nowrap}
 #app>#nav button[aria-current="page"]{color:#086237;background:#e2f2e7;font-weight:800}
 #sgBackBar{position:static;display:none}#sgBackBar.sg10-back{display:block;padding:.2rem .7rem;border:0}
@@ -146,3 +146,50 @@
 #sgReception td button { max-width: 100%; padding-left: 7px; padding-right: 7px; }
 #sgReception .pending { background: #fff3dc; }
 #sgReception .done { background: #d8f2df; }
+
+#dailySheet .sg10-order-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: .35rem .5rem;
+  margin-bottom: .55rem;
+}
+#dailySheet .sg10-order-grid > label { margin: 0; min-width: 0; font-size: .8rem; }
+#dailySheet .sg10-order-grid select,#dailySheet .sg10-order-grid input { width: 100%; min-width: 0; }
+#dailySheet .sg10-order-grid label:has(input[type="checkbox"]) { display: flex; gap: .35rem; align-items: center; }
+#dailySheet .sg10-order-grid label input[type="checkbox"] { flex: 0 0 20px; width: 20px; }
+#dailySheet .sg10-order-more { grid-column: 1 / -1; }
+#dailySheet .sg10-order-more summary { padding: .35rem 0; color: #20583a; font-weight: 700; cursor: pointer; }
+#dailySheet .sg-work-actions-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .35rem .5rem; }
+#dailySheet .sg-work-actions-grid [data-count] { grid-row: 1; grid-column: 2; text-align: right; font-size: .83rem; }
+#dailySheet .sg-work-actions-grid select { width: 100%; min-width: 0; grid-row: 2; grid-column: 1; }
+#dailySheet .sg-work-actions-grid [data-assign] { grid-row: 2; grid-column: 2; }
+#dailySheet .sg-work-actions-grid [hidden] { display: none; }
+
+/* Use the same two-column controls in staff screens, dialogs and Zona Clientes. */
+#app #content :is(.sg10-tools,.sg10-page-tools,.actions):not(.sg-work-actions-grid):not([hidden]),
+#dailyDialog .actions:not([hidden]),
+.sg10-dialog :is(.sg10-tools,.actions,.grid):not([hidden]),
+.sg-work-team .actions:not([hidden]),
+.sg10-inbox .sg10-tools:not([hidden]),
+#portal :is(.sg10-tools,.actions):not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: .4rem .55rem;
+  align-items: center;
+}
+#app #content :is(.actions,.sg10-tools,.sg10-page-tools) > *,
+#dailyDialog .actions > *,
+.sg10-dialog :is(.sg10-tools,.actions,.grid) > *,
+#portal :is(.sg10-tools,.actions) > * { min-width: 0; }
+#app #content :is(.actions,.sg10-tools,.sg10-page-tools) > :is(button,select),
+#dailyDialog .actions > button,
+.sg10-dialog :is(.sg10-tools,.actions) > button,
+.sg-work-team .actions > button,
+.sg10-inbox .sg10-tools > button,
+#portal :is(.sg10-tools,.actions) > button { min-height: 42px; overflow-wrap: anywhere; }
+#app #content :is(.actions,.sg10-tools,.sg10-page-tools) > :is(h3,p,details),
+.sg10-dialog :is(.sg10-tools,.actions,.grid) > :is(h3,p,details) { grid-column: 1 / -1; }
+#app #content .sg-work-toolbar > label { min-width: 0; }
+@media (max-width:390px) {
+  #app>#nav button { font-size: 12px; }
+}

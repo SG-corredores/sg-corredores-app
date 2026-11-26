@@ -1,6 +1,8 @@
 {
-  "version": "10.0.0-rc.11",
+  "version": "10.0.0-rc.12",
   "news": [
+    "Resumen de pedidos con compradores editables. Cada pedido sale del resumen al completar precio y puesto.",
+    "Opciones organizadas en cuadrículas y avisos por voz para pedidos, precios, puestos y otras operaciones.",
     "Los cambios de precio muestran un aviso y, al guardarlos, se abre el campo de puesto si está vacío.",
     "Un aviso por pedido de Zona Clientes y avisos para consultas e incidencias enviadas desde el portal.",
     "Recepción por cliente con confirmación de cada línea y navegación al deslizar.",

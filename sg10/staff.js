@@ -1,4 +1,4 @@
-import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.11";
+import { prepareWhatsAppInvite, attachInbox, detachPush, esc as html, formatPallets, invoke, isOrderRequest, matchCompany, orderUnitLabel, normalized, readPallets, readRelease, validNumber, version } from "./common.js?v=10.0.0-rc.12";
 import { installWalkie } from "./walkie.js?v=supabase";
 import { installOperations } from "./operations.js?v=whatsapp-directo";
 
@@ -18,7 +18,7 @@ noticePanel.setAttribute("aria-label","Avisos");
 header.append(notices,noticePanel);
 
 const primaryRoutes = [
-  ["Inicio","inicio"], ["Pedidos","hoja"], ["Compras","compras"], ["Cargas","cargas"], ["Más","more"],
+  ["Inicio","inicio"], ["Pedidos","hoja"], ["Resumen","resumenpedidos"], ["Compras","compras"], ["Cargas","cargas"], ["Más","more"],
 ];
 const nav = $("nav");
 nav.replaceChildren(...primaryRoutes.map(([label,route]) => {
@@ -26,6 +26,7 @@ nav.replaceChildren(...primaryRoutes.map(([label,route]) => {
   button.type = "button";
   button.dataset.route = route;
   button.textContent = label;
+  if (route === "resumenpedidos") button.setAttribute("aria-label","Resumen de pedidos");
   button.onclick = () => route === "more" ? openMore() : go(route);
   return button;
 }));
@@ -54,7 +55,7 @@ function openMore() {
 function updateNav() {
   const current = ["hoja","pedidos"].includes(page) ? "hoja"
     : ["cargas","pales","recepcion"].includes(page) ? "cargas"
-    : ["inicio","compras"].includes(page) ? page : "more";
+    : ["inicio","compras","resumenpedidos"].includes(page) ? page : "more";
   for (const button of nav.querySelectorAll("button")) {
     button.classList.remove("active");
     if (button.dataset.route === current) button.setAttribute("aria-current","page");
@@ -63,57 +64,60 @@ function updateNav() {
   $("sgBackBar")?.classList.toggle("sg10-back",Boolean(editing) || page !== "inicio");
 }
 
-function orderToolbar(element) {
-  const bar = document.createElement("div");
-  bar.className = "sg10-page-tools";
-  bar.innerHTML = '<button type="button" class="primary" data-new>+ Nuevo pedido</button>'
-    + '<details><summary>Más opciones</summary><div class="sg10-tools"><button type="button" data-import>Importar de WhatsApp</button>'
-    + '<button type="button" data-print>Imprimir pedidos / PDF</button></div></details>';
-  const keepDailySelection = () => {
-    sgNavDate = val("dailyDate") || today();
-    sgNavClient = val("dailyClient");
-  };
-  bar.querySelector("[data-new]").onclick = () => {
-    keepDailySelection();
-    window.sg10OpenNewOrder?.();
-    requestAnimationFrame(()=>$("dailyProduct")?.focus());
-  };
-  bar.querySelector("[data-import]").onclick = () => { keepDailySelection();window.sgImportOpen(); };
-  bar.querySelector("[data-print]").onclick = () => { keepDailySelection();window.sgPrint82(); };
-  element.prepend(bar);
-}
 function decorateDaily() {
-  const sheet=$("dailySheet");
-  if(!sheet||sheet.querySelector(".sg10-page-tools"))return;
-  const filters=document.createElement("div");
-  filters.className="sg10-sheet-filters";
-  const day=sheet.querySelector("#dailyDate"),company=sheet.querySelector("#dailyClient"),reverse=sheet.querySelector("#dailyAll");
-  day.setAttribute("aria-label","Fecha de consulta");
-  day.before(filters);
-  filters.append(company,day);
-  for(const button of sheet.querySelectorAll("#dailyPrev,#dailyNext"))button.hidden=true;
-  const instruction=[...sheet.children].find(node=>node.classList.contains("muted")&&node.textContent.includes("Desliza"));
-  if(instruction)instruction.hidden=true;
-  if(reverse) {
-    const holder=reverse.closest("label");
-    holder.hidden=true;
-    holder.classList.add("sg10-sheet-extra");
+  const sheet = $("dailySheet");
+  if (!sheet || sheet.querySelector(".sg10-order-grid")) return;
+
+  const company = $("dailyClient"), day = $("dailyDate");
+  const filters = document.createElement("div");
+  filters.className = "sg10-order-grid";
+  sheet.querySelector("h2").after(filters);
+  for (const [label, control] of [["Cliente",company],["Fecha",day]]) {
+    const tile = document.createElement("label");
+    tile.textContent = label;
+    tile.append(control);
+    filters.append(tile);
   }
-  orderToolbar(sheet);
-  const dailyOptions=sheet.querySelector(".sg10-page-tools .sg10-tools");
-  const previous=document.createElement("button");
-  const next=document.createElement("button");
-  previous.type=next.type="button";
-  previous.textContent="Cliente anterior";next.textContent="Cliente siguiente";
-  previous.onclick=()=>sheet.querySelector("#dailyPrev")?.click();
-  next.onclick=()=>sheet.querySelector("#dailyNext")?.click();
-  const refresh = sheet.querySelector("#dailyRefresh");
-  dailyOptions.append(previous,next,refresh);
-  if(reverse) {
-    const label=reverse.closest("label");
-    label.hidden=false;
-    dailyOptions.append(label);
+  const summary = page === "resumenpedidos";
+  const keepSelection = () => {
+    sgNavDate = day.value || today();
+    sgNavClient = company.value;
+  };
+  function addButton(label, action, parent = filters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = label;
+    button.onclick = action;
+    parent.append(button);
   }
+  if (summary) {
+    addButton("Hoy", () => { sgNavDate = today(); render(); });
+    if (role === "owner") addButton("Gestionar compradores", () => window.sg10ManageBuyers?.());
+  } else {
+    addButton("+ Nuevo pedido", () => {
+      keepSelection();
+      window.sg10OpenNewOrder?.();
+      requestAnimationFrame(() => $("dailyProduct")?.focus());
+    });
+    addButton("Importar WhatsApp o foto", () => { keepSelection(); window.sgImportOpen(); });
+  }
+
+  const more = document.createElement("details");
+  more.className = "sg10-order-more";
+  more.innerHTML = '<summary>Más opciones</summary><div class="sg10-order-grid"></div>';
+  filters.append(more);
+  const options = more.lastElementChild;
+  const previous = $("dailyPrev"), next = $("dailyNext");
+  for (const button of [previous,next]) button.hidden = true;
+  addButton("Cliente anterior", () => previous.click(), options);
+  addButton("Cliente siguiente", () => next.click(), options);
+  addButton("Imprimir / PDF", () => { keepSelection(); window.sgPrint82(); }, options);
+  if (!summary) addButton("¿Quién pide hoy?", () => { sgNavDate = today(); go("resumenpedidos"); }, options);
+  options.append($("dailyRefresh"),$("dailyAll").closest("label"));
+  const instruction = [...sheet.children].find(node => node.classList.contains("muted") && node.textContent.includes("Desliza"));
+  if (instruction) instruction.hidden = true;
+
   for (const cell of sheet.querySelectorAll('[data-order-id] [data-field="supplier"]')) {
     bindSplitHold(cell,cell.closest("[data-order-id]").dataset.orderId);
   }
@@ -233,7 +237,8 @@ function connectScope() {
   if (!key) { walkie.close(); return; }
   inbox = attachInbox({api,space:workspace,user:user.id,button:notices,panel:noticePanel,onOpen:goToNotice,
     onNew: event => {
-      if (event.kind === "pedido_cliente") toast("Pedido nuevo · " + (event.client_name || "Cliente"));
+      if (event.kind === "pedido_cliente" || event.kind === "nuevo_pedido") toast("Pedido nuevo · " + (event.client_name || "Cliente"));
+      if (event.kind === "puesto") toast("Puesto actualizado · " + [event.client_name,event.article].filter(Boolean).join(" · "));
       if (event.kind === "precio") toast("Precio actualizado · " + [event.client_name,event.article].filter(Boolean).join(" · "));
       if (event.kind === "mensaje_cliente") toast("Mensaje nuevo · " + (event.client_name || "Cliente"));
     },
@@ -248,7 +253,7 @@ function connectScope() {
         await sync(true);
         const active = document.activeElement;
         if (!editing && !document.querySelector("dialog[open], #dailyDialog:not([hidden])") &&
-            !active?.matches("input:not([type=checkbox]),select,textarea") && ["inicio","pedidos","hoja","compras","cargas","consultar","micompra","recepcion"].includes(page) &&
+            !active?.matches("input:not([type=checkbox]),select,textarea") && ["inicio","pedidos","hoja","compras","cargas","consultar","micompra","recepcion","resumenpedidos"].includes(page) &&
             !hasDraft()) render();
       },380);
     });

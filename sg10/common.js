@@ -1,6 +1,6 @@
-import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.11";
+import { createOrderVoice } from "./order-voice.js?v=10.0.0-rc.12";
 
-export const version = "10.0.0-rc.11";
+export const version = "10.0.0-rc.12";
 export const publicConfig = {
   url: "https://zyzcnosaavvcijsmcowq.supabase.co",
   key: "sb_publishable_Kg1dzS7_ajGn_CfRxyFyeA_ZYlXQot7",
@@ -118,7 +118,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
     if (!expanded) return;
     panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>' + (pushReady ? "Avisos del dispositivo activos" : "Activar avisos en este dispositivo") + '</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
-      + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos de pedidos por voz</label>' : '')
+      + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos por voz</label><button type="button" data-test-voice>Probar sonido</button>' : '')
       + '<details><summary>Preferencias de avisos push</summary>' + Object.entries(names).map(([kind,label]) =>
         '<label class="sg10-check"><input type="checkbox" data-kind="' + kind + '"' + (muted.includes(kind) ? '' : ' checked') + '> ' + esc(label) + '</label>').join('') + '</details>'
       + '<p data-message role="status"></p><ul class="sg10-notices">'
@@ -174,6 +174,7 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     if (!control) return;
     try {
       if (control.hasAttribute("data-close")) open(false);
+      if (control.hasAttribute("data-test-voice") && !voice?.test()) errorMessage(Error("Activa los avisos por voz para probar el sonido."));
       if (control.hasAttribute("data-mark")) await update({read_through:Math.max(readThrough,eventRows[0]?.id ?? 0)});
       if (control.hasAttribute("data-push")) {
         await subscribePush(api,space,user);
