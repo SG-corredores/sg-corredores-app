@@ -17,6 +17,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - uses: android-actions/setup-android@v3
       - run: |
           mkdir -p android/app/src/main/res/drawable
           cp icon-192.png android/app/src/main/res/drawable/sglogo.png
