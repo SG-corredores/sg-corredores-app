@@ -632,10 +632,10 @@ el('siParse').onclick=async()=>{
     if(error){const detail=await error.context?.json?.().catch(()=>null);throw Error(detail?.error||error.message)}
     if(uid!==user?.id||space!==workspace||importClient!==el('siClient').value)return;
     if(!data?.ok||!Array.isArray(data.lineas))throw Error('La IA no devolvió un pedido válido.');
-    if(data.truncado)throw Error('El pedido contiene más de 30 líneas. Divide el texto o las fotos en dos partes.');
+    if(data.truncado)throw Error('El pedido contiene más de 100 líneas. Divide el texto o las fotos en dos partes.');
     if(!data.lineas.length)throw Error('La IA no encontró líneas. Revisa la foto o introduce texto.');
     // Replace temporary interpretation only; saved orders remain untouched.
-    if(data.lineas.length>30)throw Error('Máximo 30 artículos por interpretación.');
+    if(data.lineas.length>100)throw Error('Máximo 100 artículos por interpretación.');
     interpreted=[];rows.replaceChildren();importRequest=null;
     for(const x of data.lineas){
       const photoOrder=files.length>0;
@@ -675,7 +675,7 @@ el('siSave').onclick=async()=>{
     return {row,product:row.querySelector('.ip').value.trim(),boxes,quantityUnit:unit,price,variety:row.querySelector('.iv').value.trim(),supplier:row.querySelector('.is').value.trim(),priceUnit:row.querySelector('.ipu').value};
   });
   const status=el('siStatus');
-  if(!clientId||!date||!items.length||items.length>30||items.some(x=>!x.product||!Number.isFinite(x.boxes)||x.boxes<=0||!sgUnitValid(x.quantityUnit)||Number.isNaN(x.price))){
+  if(!clientId||!date||!items.length||items.length>100||items.some(x=>!x.product||!Number.isFinite(x.boxes)||x.boxes<=0||!sgUnitValid(x.quantityUnit)||Number.isNaN(x.price))){
     status.textContent='Revisa las líneas marcadas antes de guardar. Hace falta cliente, producto, cantidad, unidad y precio válido si lo introduces.';return;
   }
   const lines=items.map(({row,...item})=>({...item,date,clientId,sourceMessage:el('siText').value.slice(0,5500)}));
