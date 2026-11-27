@@ -618,13 +618,15 @@ el('siParse').onclick=async()=>{
   if(files.length>4){status.textContent='Máximo cuatro fotos.';return}
   if(rows.children.length&&!confirm('¿Sustituir las líneas actuales?'))return;
   const connection=api,space=workspace,uid=user?.id;
+  const importClient=el('siClient').value,lugoPhoto=files.length>0&&name(importClient).trim().toLowerCase()==='lugo';
+  el('siClient').disabled=true;
   button.disabled=true;el('siSave').disabled=true;fileInput.disabled=true;input.readOnly=true;
   status.textContent='Interpretando con IA…';
   try{
     const fotos=await Promise.all(files.map(photo));
-    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto,fotos,correcciones:learned()}});
+    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto,fotos,correcciones:learned(),...(lugoPhoto?{cliente:'Lugo',unidadPorDefecto:'cajas'}:{})}});
     if(error){const detail=await error.context?.json?.().catch(()=>null);throw Error(detail?.error||error.message)}
-    if(uid!==user?.id||space!==workspace)return;
+    if(uid!==user?.id||space!==workspace||importClient!==el('siClient').value)return;
     if(!data?.ok||!Array.isArray(data.lineas))throw Error('La IA no devolvió un pedido válido.');
     if(data.truncado)throw Error('El pedido contiene más de 30 líneas. Divide el texto o las fotos en dos partes.');
     if(!data.lineas.length)throw Error('La IA no encontró líneas. Revisa la foto o introduce texto.');
@@ -644,7 +646,7 @@ el('siParse').onclick=async()=>{
     }
     status.textContent=data.lineas.length+' líneas. Revisa los artículos y confirma el pedido.';
   }catch(error){status.textContent=err(error)}
-  finally{button.disabled=false;el('siSave').disabled=false;fileInput.disabled=false;input.readOnly=false}
+  finally{button.disabled=false;el('siSave').disabled=false;fileInput.disabled=false;input.readOnly=false;el('siClient').disabled=false}
 };
 let importRequest;
 el('siSave').onclick=async()=>{
