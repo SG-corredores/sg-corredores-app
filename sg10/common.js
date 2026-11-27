@@ -115,7 +115,14 @@ export function attachInbox({ api, space, user, button, panel, onOpen, onChange,
     draw();
   }
   function draw() {
-    button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
+    if (!portal) {
+      button.setAttribute("aria-label", unreadCount ? "Avisos sin leer" : "Avisos");
+      button.title = "Avisos";
+      button.style.cssText = "position:relative;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;padding:8px;background:transparent;border:0;box-shadow:none;color:#e6c88c";
+      button.innerHTML = '<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>' + (unreadCount ? '<span aria-hidden="true" style="position:absolute;top:5px;right:5px;width:9px;height:9px;background:#ef4444;border-radius:50%;box-shadow:0 0 0 2px #123b27"></span>' : '');
+    } else {
+      button.textContent = "🔔 Avisos" + (unreadCount ? " (" + unreadCount + ")" : "");
+    }
     if (!expanded) return;
     panel.innerHTML = '<div class="sg10-tools"><button data-mark>Marcar como leídos</button><button data-push>' + (pushReady ? "Avisos del dispositivo activos" : "Activar avisos en este dispositivo") + '</button><button data-unpush>Desactivar push</button><button data-close>Cerrar avisos</button></div>'
       + (voice ? '<label class="sg10-check"><input type="checkbox" data-order-voice' + (voice.enabled() ? ' checked' : '') + '> Avisos por voz</label><button type="button" data-test-voice>Probar sonido</button>' : '')
