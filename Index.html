@@ -450,7 +450,7 @@ function sgHome(){
     const counter=count===undefined?'':`<strong aria-label="${count} ${label}">${count}</strong>`;
     return `<button class="sgtile" onclick="${open}('${route}')"><span class="sgtile-top">${art}${counter}</span><b>${title}</b><small>${subtitle}</small></button>`;
   });
-  return `<h2>Tu espacio de trabajo</h2><div class="sgtiles">${cards.join('')}</div>`;
+  return `<div class="sgtiles">${cards.join('')}</div>`;
 }
 const sgRenderOriginal=render;
 function sgGo(p){page=p;editing=null;sgRender()}
