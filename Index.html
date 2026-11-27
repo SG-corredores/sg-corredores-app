@@ -574,8 +574,12 @@ new MutationObserver(clampPosition).observe(floating,{attributes:true,attributeF
 
 const modal=document.createElement('div');modal.id='sgImport';modal.style.cssText='display:none;position:fixed;inset:0;z-index:20000;background:#0008;padding:12px;overflow:auto';modal.innerHTML=`<div class="card" style="max-width:600px;margin:12px auto;background:white;color:#163d2c"><h2>🥑 Importar pedido</h2><button class="secondary" id="siClose">Cerrar</button><p> Pega un mensaje o adjunta fotos del pedido.</p><label>Mensaje o transcripción</label><textarea id="siText" rows="5" placeholder="50 cajas de tomate a 0,65 €/kg, 30 cajas de pimiento"></textarea><label>Fotos o capturas</label><input id="siFile" type="file" accept="image/*" multiple><div id="siMedia"></div><p id="sgOCRStatus" role="status"></p><p>Selecciona hasta cuatro fotos. Se enviarán a la IA al pulsar Interpretar. Revisa todas las líneas antes de guardar.</p><label>Cliente</label><select id="siClient"></select><label>Fecha</label><input id="siDate" type="date"><button class="primary" id="siParse">Interpretar texto y fotos con IA</button><div id="siRows"></div><button class="secondary" id="siAdd">+ Añadir línea</button><p id="siStatus" role="status"></p><button class="primary" id="siSave">Confirmar y guardar líneas</button></div>`;document.body.append(modal);
 const el=id=>document.getElementById(id);let urls=[];const rows=el('siRows');
+const isLugo=()=>/\blugo\b/i.test(name(el('siClient').value));
+const cleanImport=v=>v==null||/^(null|undefined)$/i.test(String(v).trim())?'':String(v);
+function applyLugoDefaults(){if(!isLugo()||!el('siFile').files.length)return;for(const row of rows.children){const u=row.querySelector('.iu');if(!u.value&&!u.dataset.manual&&!row.dataset.unknownUnit){u.value='cajas';u.dataset.lugoDefault='1';}}}
+el('siClient').addEventListener('change',()=>{for(const row of rows.children){const u=row.querySelector('.iu');if(u.dataset.lugoDefault&&!isLugo()){u.value='';delete u.dataset.lugoDefault;}}applyLugoDefaults();});
 function clearImportPreview(){for(const url of urls)URL.revokeObjectURL(url);urls=[];el('siMedia').replaceChildren();}
-function add(product='',boxes='',price='',unit=''){const row=document.createElement('div');row.className='card';row.innerHTML='<label>Producto</label><input class="ip" maxlength="120"><label>Variedad o calibre</label><input class="iv" maxlength="120"><label>Cantidad</label><input class="ib" inputmode="decimal"><select class="iu"></select><label>Precio (€/kg o €/caja; opcional)</label><input class="ic" inputmode="decimal" placeholder="Ej. 0,65"><label>Unidad del precio</label><select class="ipu"><option value="kg">€/kg</option><option value="caja">€/caja</option><option value="pale">€/palet</option></select><label>Puesto</label><input class="is" maxlength="160"><button class="secondary" type="button">Quitar línea</button>';row.querySelector('.ip').value=product;row.querySelector('.ib').value=boxes;const u=row.querySelector('.iu'),q=row.querySelector('.ib');u.innerHTML=sgUnitOptions(unit||(parseNum(boxes)>5?'cajas':''));if(unit)u.dataset.manual='1';u.onchange=()=>u.dataset.manual='1';q.oninput=()=>sgUnitAuto(q,u);row.querySelector('.ic').value=price;row.querySelector('button').onclick=()=>row.remove();rows.append(row)}
+function add(product='',boxes='',price='',unit=''){const row=document.createElement('div');row.className='card';row.innerHTML='<label>Producto</label><input class="ip" maxlength="120"><label>Variedad o calibre</label><input class="iv" maxlength="120"><label>Cantidad</label><input class="ib" inputmode="decimal"><select class="iu"></select><label>Precio (€/kg o €/caja; opcional)</label><input class="ic" inputmode="decimal" placeholder="Ej. 0,65"><label>Unidad del precio</label><select class="ipu"><option value="kg">€/kg</option><option value="caja">€/caja</option><option value="pale">€/palet</option></select><label>Puesto</label><input class="is" maxlength="160"><button class="secondary" type="button">Quitar línea</button>';row.querySelector('.ip').value=product;row.querySelector('.ib').value=boxes;const u=row.querySelector('.iu'),q=row.querySelector('.ib');u.innerHTML=sgUnitOptions(unit||(parseNum(boxes)>5?'cajas':''));if(unit)u.dataset.manual='1';u.onchange=()=>{u.dataset.manual='1';delete u.dataset.lugoDefault;};q.oninput=()=>{sgUnitAuto(q,u);applyLugoDefaults();};row.querySelector('.ic').value=price;row.querySelector('button').onclick=()=>row.remove();rows.append(row)}
 window.sgImportOpen=function(){if(!user||!workspace){toast('Inicia sesión primero.');return}el('siClient').innerHTML='<option value="">Seleccionar cliente</option>'+options(sgSelectedClient());el('siDate').value=sgClientDate();modal.style.display='block'};
 el('siClose').onclick=()=>{modal.style.display='none'};el('siAdd').onclick=()=>add();
 el('siFile').onchange=()=>{
@@ -618,7 +622,7 @@ el('siParse').onclick=async()=>{
   if(files.length>4){status.textContent='Máximo cuatro fotos.';return}
   if(rows.children.length&&!confirm('¿Sustituir las líneas actuales?'))return;
   const connection=api,space=workspace,uid=user?.id;
-  const importClient=el('siClient').value,lugoPhoto=files.length>0&&name(importClient).trim().toLowerCase()==='lugo';
+  const importClient=el('siClient').value,lugoPhoto=files.length>0&&isLugo();
   el('siClient').disabled=true;
   button.disabled=true;el('siSave').disabled=true;fileInput.disabled=true;input.readOnly=true;
   status.textContent='Interpretando con IA…';
@@ -637,8 +641,10 @@ el('siParse').onclick=async()=>{
       const resolvedUnit=sgUnitValid(x.unidad)?x.unidad:(lugoPhoto&&!x.unidad&&!/unidad sin configurar/i.test(String(x.duda||''))?'cajas':'');
       row.querySelector('.iu').value=resolvedUnit;
       if(resolvedUnit)row.querySelector('.iu').dataset.manual='1';
-      row.querySelector('.iv').value=String(x.variedad||'');
-      row.querySelector('.is').value=String(x.puesto||'');
+      if(/unidad sin configurar/i.test(String(x.duda||'')))row.dataset.unknownUnit='1';
+      if(lugoPhoto&&resolvedUnit==='cajas'&&!x.unidad){delete row.querySelector('.iu').dataset.manual;row.querySelector('.iu').dataset.lugoDefault='1';}
+      row.querySelector('.iv').value=cleanImport(x.variedad);
+      row.querySelector('.is').value=cleanImport(x.puesto);
       row.querySelector('.ipu').value=['kg','caja','pale'].includes(x.unidadPrecio)?x.unidadPrecio:'kg';
       if(x.duda||!resolvedUnit||x.cantidad==null||(x.precio!=null&&!x.unidadPrecio)){
         const note=document.createElement('p');
@@ -655,6 +661,7 @@ el('siSave').onclick=async()=>{
   const b=el('siSave'),file=el('siFile');
   if(b.disabled)return;
   const clientId=el('siClient').value,date=el('siDate').value;
+  applyLugoDefaults();
   const items=[...rows.children].map(row=>{
     const q=row.querySelector('.ib').value,unit=row.querySelector('.iu').value,raw=row.querySelector('.ic').value.trim();
     const boxes=unit==='pales'&&window.sg10ReadPallets?window.sg10ReadPallets(q):parseNum(q);
