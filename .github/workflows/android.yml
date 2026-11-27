@@ -17,11 +17,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - uses: android-actions/setup-android@v3
       - run: |
           mkdir -p android/app/src/main/res/drawable
           cp icon-192.png android/app/src/main/res/drawable/sglogo.png
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
           gradle -p android assembleDebug
       - uses: actions/upload-artifact@v4
         with:
