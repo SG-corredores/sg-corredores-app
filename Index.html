@@ -634,7 +634,9 @@ el('siParse').onclick=async()=>{
     if(!data?.ok||!Array.isArray(data.lineas))throw Error('La IA no devolvió un pedido válido.');
     if(data.truncado)throw Error('El pedido contiene más de 30 líneas. Divide el texto o las fotos en dos partes.');
     if(!data.lineas.length)throw Error('La IA no encontró líneas. Revisa la foto o introduce texto.');
-    rows.replaceChildren();interpreted=[];
+    // Preserve previously entered and interpreted draft lines; append new imports.
+    for(const row of [...rows.children]){if(!row.querySelector('.ip').value.trim()&&!row.querySelector('.ib').value.trim())row.remove();}
+    if(rows.children.length+data.lineas.length>30)throw Error('Guarda las líneas actuales antes de añadir más de 30 artículos.');
     for(const x of data.lineas){
       const photoOrder=files.length>0;
       const parts=[x.producto,x.variedad,x.calibre].map(cleanImport).filter(Boolean);
@@ -655,7 +657,7 @@ el('siParse').onclick=async()=>{
       }
       interpreted.push({row,original:x});
     }
-    status.textContent=data.lineas.length+' líneas. Revisa los artículos y confirma el pedido.';
+    status.textContent=data.lineas.length+' líneas añadidas. Total pendiente de guardar: '+rows.children.length+'. Los pedidos guardados se conservan.';
   }catch(error){status.textContent=err(error)}
   finally{button.disabled=false;el('siSave').disabled=false;fileInput.disabled=false;input.readOnly=false;el('siClient').disabled=false}
 };
@@ -676,10 +678,8 @@ el('siSave').onclick=async()=>{
     status.textContent='Revisa las líneas marcadas antes de guardar. Hace falta cliente, producto, cantidad, unidad y precio válido si lo introduces.';return;
   }
   const lines=items.map(({row,...item})=>({...item,date,clientId,sourceMessage:el('siText').value.slice(0,5500)}));
-  if(new Set(lines.map(x=>[norm(x.product),norm(x.variety),x.boxes,x.quantityUnit,x.price,x.priceUnit,norm(x.supplier)].join('|'))).size!==lines.length){
-    status.textContent='Hay líneas repetidas. Agrupa o elimina las duplicadas antes de guardar.';return;
-  }
-  if(!confirm('¿Guardar '+lines.length+' artículos para '+name(clientId)+'?'))return;
+  if(new Set(lines.map(x=>[norm(x.product),norm(x.variety),x.boxes,x.quantityUnit,x.price,x.priceUnit,norm(x.supplier)].join('|'))).size!==lines.length&&!confirm('Hay artículos idénticos en las nuevas líneas. ¿Añadirlos igualmente?'))return;
+  if(!confirm('¿Añadir '+lines.length+' artículos al pedido de '+name(clientId)+' del '+date+'? Se conservarán los pedidos existentes.'))return;
   b.disabled=true;file.disabled=true;el('siText').readOnly=true;
   try{
     const signature=JSON.stringify(lines);
@@ -692,7 +692,7 @@ el('siSave').onclick=async()=>{
     }
     importRequest=null;interpreted=[];rows.replaceChildren();el('siText').value='';
     file.value='';clearImportPreview();el('sgOCRStatus').textContent='';status.textContent='';
-    await sync(true);modal.style.display='none';sgNavClient=clientId;sgNavDate=date;go('hoja');toast(lines.length+' artículos guardados.');
+    await sync(true);modal.style.display='none';sgNavClient=clientId;sgNavDate=date;go('hoja');toast(lines.length+' artículos añadidos al pedido existente.');
   }catch(e){status.textContent=err(e);}
   finally{b.disabled=false;file.disabled=false;el('siText').readOnly=false;}
 };
