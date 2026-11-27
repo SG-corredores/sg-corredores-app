@@ -634,11 +634,13 @@ el('siParse').onclick=async()=>{
     for(const x of data.lineas){
       add(String(x.producto||''),x.cantidad??'',x.precio??'',x.unidad||'');
       const row=rows.lastElementChild;
-      row.querySelector('.iu').value=sgUnitValid(x.unidad)?x.unidad:'';
+      const resolvedUnit=sgUnitValid(x.unidad)?x.unidad:(lugoPhoto&&!x.unidad&&!/unidad sin configurar/i.test(String(x.duda||''))?'cajas':'');
+      row.querySelector('.iu').value=resolvedUnit;
+      if(resolvedUnit)row.querySelector('.iu').dataset.manual='1';
       row.querySelector('.iv').value=String(x.variedad||'');
       row.querySelector('.is').value=String(x.puesto||'');
       row.querySelector('.ipu').value=['kg','caja','pale'].includes(x.unidadPrecio)?x.unidadPrecio:'kg';
-      if(x.duda||!x.unidad||x.cantidad==null||(x.precio!=null&&!x.unidadPrecio)){
+      if(x.duda||!resolvedUnit||x.cantidad==null||(x.precio!=null&&!x.unidadPrecio)){
         const note=document.createElement('p');
         note.style.color='#a04a00';note.textContent='Revisar: '+(x.duda||'Cantidad, unidad o precio no confirmado');row.prepend(note);
       }
