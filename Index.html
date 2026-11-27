@@ -628,7 +628,7 @@ el('siParse').onclick=async()=>{
   status.textContent='Interpretando con IA…';
   try{
     const fotos=await Promise.all(files.map(photo));
-    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto,fotos,correcciones:learned(),...(lugoPhoto?{cliente:'Lugo',unidadPorDefecto:'cajas'}:{})}});
+    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto:files.length?(texto+'\nConserva siempre nombre, variedad y calibre completos en producto o en sus campos respectivos. No omitas esos detalles.'):texto,fotos,correcciones:learned(),...(lugoPhoto?{cliente:'Lugo',unidadPorDefecto:'cajas'}:{})}});
     if(error){const detail=await error.context?.json?.().catch(()=>null);throw Error(detail?.error||error.message)}
     if(uid!==user?.id||space!==workspace||importClient!==el('siClient').value)return;
     if(!data?.ok||!Array.isArray(data.lineas))throw Error('La IA no devolvió un pedido válido.');
@@ -636,17 +636,20 @@ el('siParse').onclick=async()=>{
     if(!data.lineas.length)throw Error('La IA no encontró líneas. Revisa la foto o introduce texto.');
     rows.replaceChildren();interpreted=[];
     for(const x of data.lineas){
-      add(String(x.producto||''),x.cantidad??'',x.precio??'',x.unidad||'');
+      const photoOrder=files.length>0;
+      const parts=[x.producto,x.variedad,x.calibre].map(cleanImport).filter(Boolean);
+      const product=parts.reduce((out,part)=>out.toLowerCase().includes(part.toLowerCase())?out:[out,part].filter(Boolean).join(' '),'');
+      const explicitUnit=sgUnitValid(x.unidad);
+      const resolvedUnit=photoOrder?(isLugo()?'cajas':parseNum(x.cantidad)>5?'cajas':parseNum(x.cantidad)>0?'pales':''):(isLugo()?'cajas':explicitUnit?x.unidad:parseNum(x.cantidad)>5?'cajas':parseNum(x.cantidad)>0?'pales':'');
+      add(product,x.cantidad??'',x.precio??'',resolvedUnit);
       const row=rows.lastElementChild;
-      const explicitUnit=sgUnitValid(x.unidad); const resolvedUnit=explicitUnit?x.unidad:(lugoPhoto?'cajas':'');
-      row.querySelector('.iu').value=resolvedUnit;
-      if(resolvedUnit)row.querySelector('.iu').dataset.manual='1';
-      if(/unidad sin configurar/i.test(String(x.duda||'')))row.dataset.unknownUnit='1';
-      if(lugoPhoto&&resolvedUnit==='cajas'&&!explicitUnit){delete row.querySelector('.iu').dataset.manual;row.querySelector('.iu').dataset.lugoDefault='1';}
-      row.querySelector('.iv').value=cleanImport(x.variedad);
+      if(photoOrder||isLugo())delete row.querySelector('.iu').dataset.manual;
+      if(isLugo())row.querySelector('.iu').dataset.lugoDefault='1';
+      if(!photoOrder&&!isLugo()&&/unidad sin configurar/i.test(String(x.duda||'')))row.dataset.unknownUnit='1';
+      row.querySelector('.iv').value='';
       row.querySelector('.is').value=cleanImport(x.puesto);
       row.querySelector('.ipu').value=['kg','caja','pale'].includes(x.unidadPrecio)?x.unidadPrecio:'kg';
-      const doubt=cleanImport(x.duda); const genericDoubt=lugoPhoto&&/^(cantidad, unidad o precio no confirmado|unidad sin configurar|unidad no confirmada|precio no confirmado)[.!]?$/i.test(doubt.trim()); if((doubt&&!genericDoubt)||!resolvedUnit||!(parseNum(x.cantidad)>0)||(x.precio!=null&&cleanImport(x.precio)!==''&&!x.unidadPrecio)){
+      const doubt=cleanImport(x.duda); const genericDoubt=(files.length>0||isLugo())&&/^(cantidad, unidad o precio no confirmado|unidad sin configurar|unidad no confirmada|precio no confirmado)[.!]?$/i.test(doubt.trim()); if((doubt&&!genericDoubt)||!resolvedUnit||!(parseNum(x.cantidad)>0)||(x.precio!=null&&cleanImport(x.precio)!==''&&!x.unidadPrecio)){
         const note=document.createElement('p');
         note.style.color='#a04a00';note.textContent='Revisar: '+(x.duda||'Cantidad, unidad o precio no confirmado');row.prepend(note);
       }
