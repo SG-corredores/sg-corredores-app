@@ -628,15 +628,15 @@ el('siParse').onclick=async()=>{
   status.textContent='Interpretando con IA…';
   try{
     const fotos=await Promise.all(files.map(photo));
-    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto:files.length?(texto+'\nConserva siempre nombre, variedad y calibre completos en producto o en sus campos respectivos. No omitas esos detalles.'):texto,fotos,correcciones:learned(),...(lugoPhoto?{cliente:'Lugo',unidadPorDefecto:'cajas'}:{})}});
+    const {data,error}=await connection.functions.invoke('sg-interpretar',{body:{workspace:space,texto:files.length?(texto+'\nInterpreta exclusivamente las fotos y el texto de esta solicitud. No recuperes ni inventes líneas de otros pedidos. Conserva siempre nombre, variedad y calibre completos en producto o en sus campos respectivos. No omitas esos detalles.'):texto,fotos,correcciones:files.length?[]:learned(),...(lugoPhoto?{cliente:'Lugo',unidadPorDefecto:'cajas'}:{})}});
     if(error){const detail=await error.context?.json?.().catch(()=>null);throw Error(detail?.error||error.message)}
     if(uid!==user?.id||space!==workspace||importClient!==el('siClient').value)return;
     if(!data?.ok||!Array.isArray(data.lineas))throw Error('La IA no devolvió un pedido válido.');
     if(data.truncado)throw Error('El pedido contiene más de 30 líneas. Divide el texto o las fotos en dos partes.');
     if(!data.lineas.length)throw Error('La IA no encontró líneas. Revisa la foto o introduce texto.');
-    // Preserve previously entered and interpreted draft lines; append new imports.
-    for(const row of [...rows.children]){if(!row.querySelector('.ip').value.trim()&&!row.querySelector('.ib').value.trim())row.remove();}
-    if(rows.children.length+data.lineas.length>30)throw Error('Guarda las líneas actuales antes de añadir más de 30 artículos.');
+    // Replace temporary interpretation only; saved orders remain untouched.
+    if(data.lineas.length>30)throw Error('Máximo 30 artículos por interpretación.');
+    interpreted=[];rows.replaceChildren();importRequest=null;
     for(const x of data.lineas){
       const photoOrder=files.length>0;
       const parts=[x.producto,x.variedad,x.calibre].map(cleanImport).filter(Boolean);
@@ -657,7 +657,8 @@ el('siParse').onclick=async()=>{
       }
       interpreted.push({row,original:x});
     }
-    status.textContent=data.lineas.length+' líneas añadidas. Total pendiente de guardar: '+rows.children.length+'. Los pedidos guardados se conservan.';
+    fileInput.value='';input.value='';clearImportPreview();el('sgOCRStatus').textContent='';
+    status.textContent=data.lineas.length+' líneas nuevas interpretadas. Los pedidos guardados se conservan.';
   }catch(error){status.textContent=err(error)}
   finally{button.disabled=false;el('siSave').disabled=false;fileInput.disabled=false;input.readOnly=false;el('siClient').disabled=false}
 };
