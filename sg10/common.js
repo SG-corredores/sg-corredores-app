@@ -327,7 +327,7 @@ export async function prepareWhatsAppInvite(api, workspace, email, company, targ
       ? "Abre el enlace en tu móvil y pulsa Activar acceso. El enlace caduca en 7 días y solo se puede usar una vez."
       : "Abre el enlace y confirma tu correo electrónico. La invitación es válida durante 7 días.";
     const text = "SG Corredores te invita a " + (company === null ? "la app de empleados" : "la Zona Clientes")
-      + ". " + instructions + "\n" + invitation.href;
+      + ".\n\n📲 Instala SG Corredores en tu móvil:\nAndroid: abre este enlace en Chrome, pulsa ⋮ y selecciona Instalar aplicación o Añadir a pantalla de inicio.\niPhone: abre este enlace en Safari, pulsa Compartir y selecciona Añadir a pantalla de inicio.\nSi WhatsApp abre su navegador interno, abre el enlace en Chrome o Safari antes de activar el acceso.\nAbre la aplicación desde el icono SG y completa la activación allí. No compartas tu invitación.\n\n" + instructions + "\n" + invitation.href;
 
     const share = document.createElement("a");
     share.href = "https://wa.me/?text=" + encodeURIComponent(text);
