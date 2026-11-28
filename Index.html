@@ -236,6 +236,14 @@ async function sync(silent=false){
     }));
     if(connection!==api||space!==workspace||uid!==user?.id)return;
     keys.forEach((key,index)=>{records[key]=rows[index]});
+    // Alphabetical display order; leave dates, IDs and stored records unchanged.
+    const alphabet=new Intl.Collator('es',{sensitivity:'base',numeric:true});
+    const field=(r,k)=>String(r?.data?.[k]??'').trim();
+    records.clients.sort((a,b)=>alphabet.compare(field(a,'name'),field(b,'name')));
+    const clientNames=new Map(records.clients.map(r=>[r.id,field(r,'name')]));
+    for(const key of ['orders','purchases']){
+      records[key].sort((a,b)=>alphabet.compare(clientNames.get(a.data?.clientId)||'',clientNames.get(b.data?.clientId)||'')||alphabet.compare(field(a,'product'),field(b,'product'))||alphabet.compare(field(a,'variety'),field(b,'variety'))||alphabet.compare(field(a,'caliber'),field(b,'caliber')));
+    }
     lastSync=new Date();
     $('status').textContent='● Sincronizado · '+lastSync.toLocaleTimeString('es-ES');
     if(!editing&&!silent)render();
