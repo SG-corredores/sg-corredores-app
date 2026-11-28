@@ -464,8 +464,21 @@ const sgRenderOriginal=render;
 function sgGo(p){page=p;editing=null;sgRender()}
 function sgRender(){if(['consultar','recepcion','pales','cargas','facturas'].includes(page)){$('content').innerHTML=sgExtra(page);document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));return}sgRenderOriginal()}
 render=sgRender;home=sgHome;
+let sgProductQuery='';
+function sgProductMatches(query,x){
+ const words=t=>norm(t).split(/[^a-z0-9]+/).filter(Boolean);
+ const forms=t=>[t,...(t.endsWith('s')?[t.slice(0,-1)]:[]),...(t.endsWith('es')?[t.slice(0,-2)]:[])];
+ return words(query).every(t=>words((x.product||'')+' '+(x.variety||'')+' '+(x.caliber||x.calibre||'')).some(w=>forms(t).some(a=>forms(w).some(b=>a===b||(a.length>=2&&b.startsWith(a))))));
+}
+function sgProductResults(query){
+ const rows=records.orders.map(d).filter(x=>x.date===today()&&!/^(cancelado|anulado)$/.test(norm(x.status||''))&&sgProductMatches(query,x));
+ const groups=new Map();for(const x of rows){if(!groups.has(x.clientId))groups.set(x.clientId,[]);groups.get(x.clientId).push(x);}
+ const sorted=[...groups.entries()].sort((a,b)=>String(name(a[0])).localeCompare(String(name(b[0])),'es'));
+ return '<div class="card"><b>'+groups.size+' clientes · Total: '+esc(sgUnitTotals(rows))+'</b></div>'+ (sorted.map(([id,items])=>'<div class="card"><h3>'+esc(name(id))+'</h3><b>'+esc(sgUnitTotals(items))+'</b>'+items.sort((a,b)=>String(a.product).localeCompare(String(b.product),'es')).map(x=>'<div class="item">'+esc([x.product,x.variety,x.caliber||x.calibre].filter(Boolean).join(' '))+' · '+esc(sgUnitTotals([x]))+'<p class="muted">'+esc(x.status||'Pendiente')+'</p></div>').join('')+'</div>').join('')||'<div class="card">No hay pedidos coincidentes hoy.</div>');
+}
+function sgProductSearch(input){sgProductQuery=input.value;const target=$('sgProductResults');if(target)target.innerHTML=sgProductResults(sgProductQuery);}
 function sgExtra(p){let ordersToday=records.orders.filter(r=>d(r).date===today()),buys=records.purchases.filter(r=>d(r).date===today());let row=x=>`<div class="item"><b>${esc(name(d(x).clientId))} · ${esc(d(x).product||'Producto')}</b><p>${esc(d(x).variety||'')} · ${qty(d(x).boxes)} ${sgUnitLabel(d(x),d(x).boxes)} · ${esc(d(x).status||'Pendiente')}</p></div>`;
-if(p==='consultar'){let products=Object.create(null);for(let r of ordersToday){let x=d(r);if(['Cancelado','Anulado'].includes(x.status))continue;let k=(x.product||'Sin producto')+' · '+(x.variety||'');(products[k]??=[]).push(r)}return `<h2>🔎 Consultar producto</h2><p class="muted">Pedidos de hoy agrupados por producto y variedad.</p>${Object.entries(products).map(([k,rs])=>`<div class="card"><h3>${esc(k)}</h3><b>${sgUnitTotals(rs.map(d))}</b>${rs.map(row).join('')}</div>`).join('')||'<div class="card">No hay pedidos hoy.</div>'}`}
+if(p==='consultar')return `<h2>🔎 Consultar producto</h2><label for="sgProductQuery">Producto, variedad o calibre</label><input id="sgProductQuery" type="search" placeholder="Ej. tomate pera rama" value="${esc(sgProductQuery)}" oninput="sgProductSearch(this)"><p class="muted">Pedidos de hoy · búsqueda por todas las palabras</p><div id="sgProductResults">${sgProductResults(sgProductQuery)}</div>`;
 if(p==='recepcion')return window.sg10Reception?.()||'';
 if(p==='pales')return `<h2 class="sg-pallet-heading"><img src="./sg10/palet-madera.jpg" alt="" width="42" height="36"> Palets</h2><div class="card"><p>Preparación y agrupación de mercancía.</p><p class="sgnotice">Módulo en desarrollo. No se han creado palets ni asignaciones automáticas.</p><button onclick="go('hoja')">Ver pedidos</button></div>`;
 if(p==='cargas'){buys=records.purchases.filter(sgClientMatch).filter(r=>d(r).date===sgClientDate());return `<h2>🚚 Cargas</h2><div class="card"><h3>Kilos registrados en la fecha</h3><div class="big">${qty(buys.filter(r=>d(r).status!=='Anulado').reduce((s,r)=>s+kilos(d(r)),0))} kg</div>${buys.map(row).join('')||'Sin compras en esta fecha.'}<p class="sgnotice">Consulta el paletizaje por cliente en Palets.</p></div>`;}
